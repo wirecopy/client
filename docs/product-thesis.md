@@ -20,7 +20,7 @@ The recurring workaround has too many context switches:
 1. Save or export the asset.
 2. Choose an uploader or storage console.
 3. Upload it.
-4. find the correct sharing option.
+4. Find the correct sharing option.
 5. Copy the URL.
 6. Return to the original application.
 7. Paste it in the expected format.
