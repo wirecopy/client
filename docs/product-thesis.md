@@ -2,10 +2,11 @@
 
 ## One-sentence position
 
-Clipboard to Link is a developer-first macOS publishing utility: copy an image
+Wirecopy is a developer-first macOS publishing utility: copy an image
 or file, press one shortcut, and paste a controlled link into any application.
 
-The working name describes the job, not the eventual brand.
+The name describes the act—a copy sent over the wire—rather than the storage
+mechanism. See [decision 0003](decisions/0003-wirecopy-product-name.md).
 
 ## The problem
 

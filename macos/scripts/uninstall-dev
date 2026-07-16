@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+rm -rf "$HOME/Applications/Wirecopy.app"
+rm -f "$(CDPATH= cd -- "$(dirname -- "$0")/../bin" && pwd)/wirecopy-release"
+echo "Removed the development Wirecopy application. Keychain and preferences were preserved."

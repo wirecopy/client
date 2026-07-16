@@ -2,151 +2,239 @@
 
 ## System shape
 
+Wirecopy has two codebases joined by a versioned managed-service contract:
+
 ```text
-Clipboard / Finder / Share / CLI
-              │
-              ▼
-       Native input adapters
-              │
-              ▼
-       Publishing service
-        ├─ policy resolver
-        ├─ file preparation
-        ├─ destination
-        └─ output formatter
-              │
-       ┌──────┴────────┐
-       ▼               ▼
- Managed destination  S3-compatible destination
-       │               │
-       ▼               ▼
- Short controlled URL  public or signed object URL
-              │
-              ▼
-       Clipboard / JSON result
+Public repository                          Private repository
+┌──────────────────────────┐              ┌──────────────────────────┐
+│ Native Swift/SwiftUI app │              │ Rails 8.1 monolith       │
+│ Standalone Swift CLI     │              │ Hotwire web application │
+│ Shared publishing model │◀─ OpenAPI ───▶│ JSON API and link host  │
+│ BYOS destination adapters│              │ jobs, billing and admin │
+└────────────┬─────────────┘              └────────────┬─────────────┘
+             │                                         │
+             ├── user-owned S3-compatible storage     ├── PostgreSQL
+             │                                         └── private R2
+             └── managed upload intent ────────────────────────┘
 ```
 
-The native app, extensions and CLI share domain models. Platform adapters may
-differ, but input preparation, policy validation, destination behavior and
-result formatting should not be reimplemented per entry point.
+The public repository contains `contracts/managed-api-v1.yaml`. The private
+service pins an exact public tag or commit, generates or validates its API
+types, and fails CI when its implementation is incompatible. Additive changes
+remain in v1; breaking changes require a new major contract.
 
-## Proposed native modules
+## Native client
+
+The app supports macOS 14 and later as a universal Apple silicon and Intel
+build. SwiftUI owns normal application surfaces and AppKit is used where macOS
+APIs require it. The app and standalone CLI share Swift packages; the CLI does
+not depend on a running GUI application.
 
 | Module | Responsibility |
 | --- | --- |
-| `InputSource` | Describes pasteboard, Finder, Share extension, dropped or explicit-path input. |
-| `InputInspector` | Selects supported representations and rejects unsupported input without mutation. |
-| `PreparedAsset` | Represents a stable file, MIME type, safe name, size and cleanup ownership. |
-| `PublishPolicy` | Captures destination, retention, access mode, output format and packaging rules. |
-| `UploadDestination` | Validates configuration, creates upload grants or signs S3 requests, and completes publication. |
-| `Publisher` | Coordinates preparation, progress, cancellation, upload and result persistence. |
-| `PublishedLink` | Stores URL, object identity, lifecycle, destination and available actions. |
-| `OutputFormatter` | Produces raw, Markdown, HTML or structured results. |
-| `HistoryStore` | Persists non-secret link metadata and revocation/deletion state. |
+| `InputSource` | Describes pasteboard, Finder or explicit-path input. |
+| `InputInspector` | Selects supported representations without mutating the clipboard. |
+| `PreparedAsset` | Owns a stable file, MIME type, safe name, size and cleanup. |
+| `PublishPolicy` | Captures destination, retention, output and packaging rules. |
+| `UploadDestination` | Implements managed intents or an S3-compatible destination. |
+| `Publisher` | Coordinates preparation, progress, cancellation and persistence. |
+| `PublishedLink` | Records URL, destination, lifecycle and supported actions. |
+| `OutputFormatter` | Produces raw URL, Markdown, HTML or structured JSON. |
+| `HistoryStore` | Persists non-secret local history in a small versioned database. |
 
-Swift protocols should define boundaries where multiple implementations exist.
-Avoid layers whose only purpose is to mirror these names.
+The first official BYOS compatibility matrix is AWS S3, Cloudflare R2,
+Backblaze B2 and MinIO. Provider presets compile into one explicit S3
+configuration containing endpoint, region, bucket, addressing mode, object
+prefix and public-link strategy. Credentials remain in Keychain.
+
+Capability-aware UI is required. A BYOS destination that cannot revoke or
+expire a link must not display those actions as though they were supported.
+
+## Managed Rails service
+
+The managed service is a Ruby on Rails 8.1 full-stack monolith with Hotwire,
+Turbo and Stimulus. It owns:
+
+- the account, link-management, usage and billing web UI;
+- the JSON API used by the official clients;
+- managed-link resolution;
+- authorization, quotas and lifecycle state;
+- Dodo Payments webhooks and subscription reconciliation;
+- Solid Queue jobs for scanning, reconciliation, deletion and notifications;
+- internal abuse and administration surfaces.
+
+The browser application and JSON API are one deployable application. They do
+not need a separate frontend runtime. The initial hostnames are:
+
+| Host | Purpose |
+| --- | --- |
+| `app.wirecopy.app` | Account and management UI. |
+| `api.wirecopy.app` | Client API. |
+| `links.wirecopy.app` | Public managed-link resolver. |
+
+Application authentication cookies are host-only and never sent to the public
+link host or object-storage origin.
 
 ## Managed upload sequence
 
 ```text
-Mac client                API                 Object storage
-    │                      │                        │
-    │─ create intent ─────▶│                        │
-    │                      │─ authorize + quota     │
-    │◀─ scoped PUT grant ──│                        │
-    │──────────────────── direct upload ───────────▶│
-    │─ complete intent ───▶│                        │
-    │                      │─ verify object ───────▶│
-    │◀─ controlled link ───│                        │
+Mac client            Rails API          Private object store      Scanner
+    │                      │                       │                    │
+    │─ create intent ─────▶│                       │                    │
+    │                      │─ authorize + quota    │                    │
+    │◀─ scoped PUT grant ──│                       │                    │
+    │──────────────────── direct upload ─────────▶│                    │
+    │─ complete intent ───▶│                       │                    │
+    │                      │─ verify object ──────▶│                    │
+    │                      │──────────────────────── scan request ────▶│
+    │◀─ available link ────│◀────────────────────── scan result ───────│
 ```
 
-The API does not proxy ordinary file bytes. An upload grant is short-lived,
-limited to one object key and constrained by expected content length/type where
-the provider supports it. Completion is idempotent.
+Rails never proxies ordinary upload bytes. `UploadIntent` wraps the storage
+adapter and issues a short-lived grant limited to one unpredictable key and the
+declared size/type constraints that the provider can enforce. Completion is
+idempotent and verifies the stored object before it can become available.
 
-## S3-compatible upload sequence
+The managed lifecycle is:
 
-The Mac signs and sends the upload directly using credentials stored in
-Keychain. Configuration includes endpoint, region/signing scope, bucket,
-optional account/tenant ID, path-style behavior, object prefix and public-link
-strategy.
+```text
+created → uploading → quarantined → available → expired
+                    │             ├────────────→ revoked
+                    │             └────────────→ deleted
+                    └─────────────→ rejected
+```
 
-Provider-specific presets may fill defaults but should compile into one
-validated S3 destination configuration. Do not silently combine partial
-credential namespaces or fall back between profiles; a selected profile is
-complete or fails loudly.
+Malware, scan failures and encrypted archives are rejected in the initial
+managed service. Only verified PNG, JPEG, GIF and WebP assets may render inline;
+other accepted files use attachment disposition.
 
-Supported URL strategies:
+## Identity and API authorization
 
-- public base URL plus object key;
-- temporary presigned GET URL;
-- custom link service, if explicitly configured.
+Clerk provides Apple and GitHub sign-in for the web and native onboarding
+flow. Rails remains the authorization system of record. A Clerk session is
+exchanged for a revocable, scoped Rails device token stored in Keychain.
 
-The application must explain that an S3 API endpoint is not necessarily a
-public website. A valid upload does not prove anonymous download access.
+The standalone CLI uses the same Keychain token when it can share the official
+access group. Self-built or differently signed CLIs can use a personal/device
+token created in the dashboard instead of depending on the official signing
+identity.
 
-## Link model
+The v1 contract includes, at minimum:
 
-A managed link points to an application-controlled identifier rather than the
-raw storage key. The link record can include:
+- device-token exchange, listing and revocation;
+- upload-intent create and complete;
+- link list, detail, revoke and delete;
+- quota and plan summary;
+- managed history synchronization.
 
-- owner and destination;
-- object identifier and content type;
-- original display name and size;
-- created, expires, revoked and deleted timestamps;
-- access policy and optional password verifier;
-- download counters or abuse flags when the privacy policy permits them;
-- checksum and upload completion state.
-
-Redirect or download services must enforce the record state on every request.
-Short IDs require enough entropy to resist enumeration.
-
-## Local persistence
-
-- Secrets and access tokens: Keychain.
-- Preferences and non-secret presets: application settings store.
-- Recent-link metadata: a small versioned database.
-- Prepared temporary assets: protected cache with explicit ownership and
-  restart cleanup.
-- Diagnostic logs: bounded, redacted and user-exportable.
-
-URLs can contain credentials or signatures. Logs must redact query strings by
+Managed history synchronizes through Rails. BYOS history remains local because
+the managed service does not receive user-owned destination metadata by
 default.
 
-## CLI contract
+## Link delivery
 
-A future command shape might be:
+Managed links use at least 128 bits of entropy and are bearer credentials.
+Rails checks expiration, revocation, deletion and abuse state on every request,
+records an allowed aggregate access event, and returns a redirect to a
+very-short-lived signed R2 GET URL. It does not stream the file through Rails.
+
+The initial release has bearer links only. Passwords and client-side encrypted
+links are deferred until their security and recovery protocols are reviewed.
+
+## Local service development
+
+Local Rails development uses a deliberately small Docker Compose file with
+only two infrastructure services:
+
+| Service | Purpose | Local behavior |
+| --- | --- | --- |
+| `db` | PostgreSQL, matching the production adapter | Separate development and test databases in one persistent volume. |
+| `minio` | S3-compatible object storage | One private development bucket and one persistent volume. |
+
+Rails runs on the host for fast reloads. PostgreSQL and MinIO ports bind to
+`127.0.0.1`, images are pinned, both services have health checks, and example
+credentials are development-only values in `.env.example`. No local SQLite
+adapter or Homebrew PostgreSQL installation is supported.
+
+The normal commands are:
 
 ```bash
-ctl publish ./diagram.png --preset quick --format markdown
-ctl publish --clipboard --json
-ctl links revoke <id>
-ctl links delete <id>
+docker compose up -d db minio
+bin/setup
+bin/dev
 ```
 
-The executable name is unresolved. Exit codes and JSON fields must be versioned
-before integrations depend on them. Human-readable progress goes to standard
-error so standard output remains pipeable.
+`bin/setup` waits for healthy services, creates and migrates the databases, and
+idempotently creates the private MinIO bucket through the same S3 SDK used by
+the application. Environment variables select the storage implementation:
 
-## Reliability requirements
+- development and local integration tests use the MinIO endpoint with
+  path-style addressing;
+- deployed environments require `DATABASE_URL` and R2 credentials and endpoint;
+- production refuses to boot when required database or object-storage
+  credentials are missing.
 
-- cancellation propagates to preparation and network tasks;
-- retries never create an uncontrolled second public object;
-- completion and deletion operations are idempotent;
-- the original clipboard is preserved until a link is ready;
-- a failed link-formatting step does not orphan an unknown object;
-- lifecycle status reconciles after offline periods;
-- clocks and upload expiration are handled explicitly;
-- tests cover interrupted uploads, app termination and stale grants.
+ClamAV is intentionally not a third default Compose service. Most local tests
+use a scanner fake; a small opt-in Compose profile or CI job runs the real
+scanner and the EICAR integration test.
 
-## Open architecture decisions
+The repository-level `./scripts/verify` command owns environment creation,
+fixture loading, fault simulation, scenario execution and cleanup. It requires
+no interactive provider login. See [Automated testing harness](testing-harness.md).
 
-- whether the CLI embeds upload logic or talks to the running app;
-- the managed identity and billing provider;
-- redirect edge runtime and metadata store;
-- multipart upload threshold and resume behavior;
-- encrypted-link protocol and its impact on scanning/previews;
-- history synchronization between Macs;
-- whether BYOS can optionally use managed short links without transferring file
-  ownership.
+## Production deployment
+
+Kamal deploys the Rails image to an initial Hetzner VM. Rails web, Solid Queue,
+PostgreSQL and an isolated ClamAV container share that host for the first paid
+beta. This is a cost-conscious starting topology, not an assertion that the
+database will remain colocated indefinitely.
+
+Production storage is a private Cloudflare R2 bucket. PostgreSQL continuously
+archives WAL to a separate encrypted R2 backup bucket, creates daily base
+backups, retains recovery data for 30 days and is restore-tested weekly. The
+internal objectives are a 15-minute recovery point, four-hour recovery time and
+99.5% availability; no public SLA is promised.
+
+The deployment region remains configurable until customer evidence determines
+the primary geography.
+
+## CLI and distribution contract
+
+The executable is `wirecopy`. Human progress is written to standard error and
+pipeable output to standard output. JSON response fields and exit codes are
+versioned before integrations depend on them.
+
+```bash
+wirecopy publish ./diagram.png --preset quick --format markdown
+wirecopy publish --clipboard --json
+wirecopy links revoke <id>
+```
+
+The signed standalone CLI is bundled with the application in the same Homebrew
+Cask. A separate formula is deferred until independent CLI installation proves
+useful.
+
+## Build order
+
+1. Native client and CLI against a deterministic fake destination.
+2. BYOS adapters and provider contract tests.
+3. Rails managed path using local PostgreSQL and MinIO.
+4. Dodo billing, production R2, scanning and paid beta operations.
+
+## Deferred decisions
+
+- multipart threshold and resume behavior beyond the initial 250 MB limit;
+- password-protected and client-side encrypted links;
+- folders, file promises, packages and collection landing pages;
+- custom domains, teams and visitor-level analytics;
+- optional managed short links for BYOS objects;
+- App Store distribution, a separate CLI formula and managed-service
+  self-hosting;
+- moving PostgreSQL or workers to separate production hosts as measured load or
+  failure isolation requires.
+
+The next architecture exploration is atomic publication of an HTML file or
+static-site folder to managed R2, followed by capability-aware BYOS modes. It is
+specified separately in
+[Static-site publishing exploration](static-site-publishing.md) because active
+HTML cannot use the ordinary download origin or lifecycle unchanged.

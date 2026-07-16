@@ -79,7 +79,7 @@ beta. Test:
 - immediate managed setup versus BYOS;
 - 24-hour and configurable retention;
 - maximum-file and active-storage limits;
-- candidate $5–8 monthly pricing;
+- the selected $7 monthly Pro price;
 - transparent usage display;
 - account, revoke, delete and abuse flows.
 
@@ -90,20 +90,57 @@ reasonable” is weak evidence.
 
 Proceed to production operations only when paid conversion and observed storage
 behavior support a conservative contribution-margin model with abuse and
-support allowance.
+support allowance, and the security/recovery gate below passes.
 
 ## Stage 5: compatibility expansion
 
 Add input types by observed demand and automated fixtures:
 
 1. clipboard PNG/JPEG and single Finder file;
-2. multiple files and folders/ZIP;
-3. PDFs, video, audio, archives and large uploads;
-4. iCloud placeholders, file promises, packages, aliases and symlinks;
+2. multiple Finder files packaged as one deterministic ZIP;
+3. PDFs, video, audio, archives and files within the plan limit;
+4. folders, iCloud placeholders, file promises, packages, aliases and symlinks;
 5. Share extension, Finder action, Shortcuts and third-party integrations.
 
 Maintain a tested matrix across supported macOS versions and Apple hardware.
 Public copy must match it.
+
+## Next exploration: static sites
+
+After the controlled file-link workflow passes its retention gates, prototype
+one HTML file or one folder with a root `index.html` as an atomically published
+site. Begin with managed R2 and a dedicated isolated site origin, then test the
+same manifest against BYOS capability classes. The experiment and its automated
+browser/security gates are defined in
+[Static-site publishing exploration](static-site-publishing.md).
+
+## Technical beta gate
+
+The service path is tested locally with Rails on the host and a minimal Docker
+Compose stack containing PostgreSQL and MinIO. CI repeats the managed
+intent-to-PUT-to-completion flow against those services and separately runs the
+opt-in ClamAV profile.
+
+All gates are executable through the non-interactive
+[automated testing harness](testing-harness.md). Test runs emit machine-readable
+evidence and never require the product owner to provide input during execution.
+
+Before paid beta:
+
+- Clerk verification, Rails device-token lifecycle and cross-account
+  authorization tests pass;
+- MinIO and real R2 contract tests cover scoped upload grants, completion,
+  quarantine, download, revoke and delete;
+- clean, EICAR, scanner-down and encrypted-archive paths fail or progress as
+  specified;
+- public-host cookie isolation and active-content download headers pass browser
+  tests;
+- Dodo webhook verification, replay and entitlement reconciliation pass;
+- account deletion revokes access immediately and purges active objects within
+  24 hours under fault injection;
+- the privacy inventory matches actual diagnostic and access-metric events;
+- a restore drill meets the 15-minute RPO and four-hour RTO;
+- no critical security finding remains unresolved.
 
 ## Competitor trials
 

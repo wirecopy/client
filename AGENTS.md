@@ -12,8 +12,9 @@ These instructions apply to the entire repository.
 
 ## Product boundaries
 
-- The working name is provisional. Do not turn it into a public brand without
-  an explicit naming decision.
+- Wirecopy is the selected product name (see
+  `docs/decisions/0003-wirecopy-product-name.md`). Do not describe the product
+  as launched until the domain, trademark and release gates are complete.
 - Do not describe the product as merely an S3 uploader or screenshot tool.
 - The core job is clipboard-to-controlled-link publishing for developers.
 - Managed cloud and bring-your-own S3 must present one consistent workflow.
@@ -53,6 +54,11 @@ Keep `README.md` concise. Put detailed material in the focused documents under
 
 - Prefer a native Swift and SwiftUI application with AppKit where macOS APIs
   require it.
+- Keep the Apache-2.0 Mac app, standalone CLI, shared Swift model, BYOS adapters
+  and managed OpenAPI contract in the public client repository. Keep the Rails
+  managed-service implementation and operations in a private repository.
+- Pin the private service to an exact public contract tag or commit and verify
+  compatibility in CI; never build against an unpinned `latest` contract.
 - Keep clipboard inspection, publishing, storage destinations and output
   formatting behind separate interfaces.
 - Store user-owned credentials in Keychain, never plaintext preferences.
@@ -61,7 +67,25 @@ Keep `README.md` concise. Put detailed material in the focused documents under
 - Serve untrusted content from a domain that cannot receive application cookies.
 - Treat expiration, revocation, deletion, rate limits and abuse reporting as
   core behavior rather than post-launch additions.
-- Add no telemetry without an explicit data inventory and opt-out decision.
+- Add no client diagnostics without an explicit data inventory and settings
+  opt-in. Keep filenames, URLs, clipboard contents, object keys and credentials
+  out of telemetry.
+- Build the managed service as a Rails 8.1 Hotwire monolith using PostgreSQL and
+  Solid Queue. Do not add a separate frontend or Redis without demonstrated
+  need.
+- For local service work, run Rails on the host and keep the default Docker
+  Compose file to PostgreSQL and MinIO. Do not add SQLite as a second adapter.
+- Production uses private Cloudflare R2 object storage and an initial Kamal
+  deployment on Hetzner. Missing production database, storage or scanner
+  configuration must fail closed.
+- Bundle the standalone `wirecopy` CLI in the signed application Homebrew Cask;
+  do not introduce a separate formula until independent installation is needed.
+- Keep `./scripts/verify` non-interactive in both repositories. It must create
+  disposable test environments, reject production targets, emit machine-readable
+  evidence and cover the scenario matrix in `docs/testing-harness.md`.
+- Treat rendered HTML/folder publishing as the separate exploration in
+  `docs/static-site-publishing.md`, not as initial file support. Never serve
+  user HTML from `wirecopy.app` or the ordinary managed-link origin.
 
 ## Validation
 

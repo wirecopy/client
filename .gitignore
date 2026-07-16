@@ -1,9 +1,4 @@
 .DS_Store
-.env
-.env.*
-!.env.example
-.build/
-DerivedData/
-dist/
-*.xcuserstate
-xcuserdata/
+macos/.build/
+macos/dist/
+macos/bin/wirecopy-release

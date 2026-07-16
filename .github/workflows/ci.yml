@@ -1,0 +1,32 @@
+name: Native client CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Toolchain
+        run: swift --version
+      - name: Unit tests
+        working-directory: macos
+        run: swift test
+      - name: Universal development bundle
+        working-directory: macos
+        run: ./scripts/build-app
+      - name: Verify bundle
+        working-directory: macos
+        run: |
+          codesign --verify --deep --strict dist/Wirecopy.app
+          test "$(lipo -archs dist/Wirecopy.app/Contents/MacOS/WirecopyApp)" = "x86_64 arm64"
+          test "$(lipo -archs dist/Wirecopy.app/Contents/MacOS/wirecopy)" = "x86_64 arm64"
+          plutil -lint dist/Wirecopy.app/Contents/Info.plist
+      - name: Validate contract and Cask syntax
+        run: |
+          ruby -e 'require "yaml"; YAML.safe_load(File.read("contracts/managed-api-v1.yaml"), aliases: true)'
+          ruby -c macos/Casks/wirecopy.rb.template

@@ -14,6 +14,8 @@ Recommended reading order:
 7. [Managed cloud](managed-cloud.md)
 8. [Security and abuse](security-and-abuse.md)
 9. [Business model](business-model.md)
-10. [Research sources](research-sources.md)
+10. [Automated testing harness](testing-harness.md)
+11. [Static-site publishing exploration](static-site-publishing.md)
+12. [Research sources](research-sources.md)
 
 Accepted decisions are indexed in [Decisions](decisions/README.md).

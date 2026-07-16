@@ -39,7 +39,8 @@ Named policy presets make security understandable:
 
 - **Quick:** short retention, direct URL, no prompt;
 - **Work:** longer retention and account history;
-- **Sensitive:** password or client-side encrypted mode when available;
+- **Sensitive:** a research placeholder for password or client-side encryption,
+  unavailable until its protocol and recovery behavior pass review;
 - **Permanent:** user-owned storage with no automatic deletion.
 
 The UI should show what will happen, not expose raw storage vocabulary on every
@@ -71,10 +72,11 @@ These are hypotheses to validate, not a launch checklist.
 | Expiring/revocable links | Makes public sharing safer | Redirect service and metadata required | Managed-cloud default |
 | One-use links | Useful for sensitive handoff | Race conditions and confusing retries | Experiment |
 | Client-side encryption | Provider cannot read content | Preview, scanning, recovery and UX tradeoffs | Research before promise |
-| Multi-file landing page or ZIP | Shares a selection coherently | Packaging, limits and preview security | Early follow-up |
+| Deterministic multi-file ZIP | Shares a selection coherently across managed and BYOS destinations | Local packaging and temporary-disk limits | Initial matrix |
 | Optional auto-insert | Eliminates final paste step | Accessibility permission and surprise risk | Opt-in experiment |
 | Custom domains | Professional links and trust | DNS/support burden | Paid follow-up |
 | Link health and revocation from CLI | Developer control | Metadata consistency | Differentiating follow-up |
+| Instant static-site publishing | Turns an HTML file/folder into a live site | Active-content isolation, routing and abuse | Next exploration after core publishing |
 
 ## What not to build first
 

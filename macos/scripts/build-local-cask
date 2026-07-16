@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+VERSION=${WIRECOPY_VERSION:-0.1.0-dev}
+"$ROOT/scripts/build-app" >/dev/null
+ARCHIVE="$ROOT/dist/Wirecopy-$VERSION.zip"
+SHA=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')
+URL="file://$ARCHIVE"
+mkdir -p "$ROOT/dist/Casks"
+sed -e "s/__VERSION__/$VERSION/g" -e "s/__SHA256__/$SHA/g" -e "s|__URL__|$URL|g" "$ROOT/Casks/wirecopy.rb.template" > "$ROOT/dist/Casks/wirecopy.rb"
+echo "$ROOT/dist/Casks/wirecopy.rb"

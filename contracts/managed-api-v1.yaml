@@ -1,0 +1,175 @@
+openapi: 3.1.0
+info:
+  title: Wirecopy Managed API
+  version: 1.0.0
+  description: Versioned contract used by the native app and standalone CLI.
+servers:
+  - url: https://api.wirecopy.app
+  - url: http://localhost:3000
+security:
+  - deviceToken: []
+paths:
+  /api/v1/upload_intents:
+    post:
+      operationId: createUploadIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upload]
+              properties:
+                upload: { $ref: '#/components/schemas/CreateUpload' }
+      responses:
+        '201':
+          description: Intent and direct-upload grant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/v1/upload_intents/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IntentID'
+    get:
+      operationId: getUploadIntent
+      responses:
+        '200':
+          description: Current upload lifecycle state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadIntent' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/upload_intents/{id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/IntentID'
+    post:
+      operationId: completeUploadIntent
+      description: Idempotently verifies an uploaded object and starts or observes quarantine scanning.
+      responses:
+        '200':
+          description: Updated lifecycle state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadIntent' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/links:
+    get:
+      operationId: listLinks
+      responses:
+        '200':
+          description: Most recent managed links
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [links]
+                properties:
+                  links:
+                    type: array
+                    items: { $ref: '#/components/schemas/ManagedLink' }
+  /api/v1/links/{id}:
+    delete:
+      operationId: revokeLink
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204': { description: Link revoked }
+        '404': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    deviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: wc_live
+  parameters:
+    IntentID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Error:
+      description: Structured API failure
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    CreateUpload:
+      type: object
+      required: [filename, content_type, byte_size]
+      properties:
+        filename: { type: string, minLength: 1 }
+        content_type: { type: string }
+        byte_size: { type: integer, minimum: 1 }
+        expires_in: { type: integer, minimum: 1 }
+    UploadIntent:
+      type: object
+      required: [id, state, filename, content_type, byte_size, expires_at]
+      properties:
+        id: { type: string }
+        state:
+          type: string
+          enum: [created, uploading, quarantined, available, rejected, expired, revoked, deleted]
+        filename: { type: string }
+        content_type: { type: string }
+        byte_size: { type: integer }
+        expires_at: { type: string, format: date-time }
+        error:
+          oneOf:
+            - { $ref: '#/components/schemas/ErrorDetail' }
+            - { type: 'null' }
+        link:
+          oneOf:
+            - { $ref: '#/components/schemas/UploadLink' }
+            - { type: 'null' }
+        upload:
+          oneOf:
+            - { $ref: '#/components/schemas/UploadGrant' }
+            - { type: 'null' }
+    UploadGrant:
+      type: object
+      required: [url, method, headers]
+      properties:
+        url: { type: string, format: uri }
+        method: { type: string, const: PUT }
+        headers:
+          type: object
+          additionalProperties: { type: string }
+    UploadLink:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+    ManagedLink:
+      type: object
+      required: [id, url, filename, byte_size, content_type, access_count, expires_at, created_at]
+      properties:
+        id: { type: integer }
+        url: { type: string, format: uri }
+        filename: { type: string }
+        byte_size: { type: integer }
+        content_type: { type: string }
+        access_count: { type: integer }
+        last_accessed_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: string, format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/ErrorDetail' }
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }

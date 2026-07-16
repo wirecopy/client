@@ -8,12 +8,12 @@ does not support assuming venture-scale demand.
 
 Revenue should align with the two storage modes:
 
-- **Bring your own storage:** free core or a one-time application license.
+- **Bring your own storage:** free, open-source client and CLI.
 - **Managed cloud:** recurring subscription for storage, lifecycle, links and
   operations.
 
-The exact packaging remains a hypothesis until workflow and willingness-to-pay
-tests are complete.
+The Free/Pro beta packaging is selected but remains subject to evidence from
+workflow, cost and willingness-to-pay tests.
 
 ## Why a hybrid model fits
 
@@ -26,19 +26,23 @@ BYOS can also distribute the app among technical users without subsidizing
 their file storage. The managed path can monetize users who prefer not to
 configure infrastructure.
 
-## Packaging hypotheses
+## Initial packaging
 
 | Offering | Candidate value | Candidate price |
 | --- | --- | ---: |
-| Free local/BYOS | Core shortcut, one S3 destination, raw/Markdown output, limited history | $0 |
-| Mac Pro license | Multiple presets/destinations, advanced output, CLI/integrations, full local history | One-time price to test |
+| Open-source local/BYOS | Core shortcut, S3-compatible destinations, output formats, CLI/integrations and local history | $0 |
 | Managed Free | Immediate hosted setup, short retention and modest daily/byte limits | $0 |
-| Managed Pro | More storage, larger files, configurable retention, custom domains and richer controls | $5–8/month hypothesis |
+| Managed Pro | 250 MB files, 25 GB active storage, 30-day default retention and up to one-year retention | $7/month |
 | Team | Shared domains, policies, billing and administration | Later, only after individual pull |
 
 Avoid manufacturing incompatibility between local and managed modes. Paid value
-should come from meaningful capability and operating cost, not friction in the
-core shortcut.
+should come from the convenience and operating cost of managed capabilities,
+not friction or arbitrary feature gates in the Apache-2.0 client.
+
+The managed Free plan allows five uploads per day, 25 MB per file, 1 GB of
+active storage and 24-hour retention. Dodo Payments is the merchant of record
+for Pro subscriptions. Rails treats verified Dodo webhooks—not a client claim
+or checkout redirect—as the entitlement source of truth.
 
 ## Unit-economics model
 
@@ -101,8 +105,13 @@ supports the worst credible use.
 - gross and contribution margin;
 - abuse/support incidents per thousand links.
 
-Metrics require an explicit privacy inventory. Local/BYOS behavior should not be
-uploaded merely because it would make product analytics easier.
+Metrics require an explicit privacy inventory. Local/BYOS behavior remains
+local. Optional client diagnostics require settings opt-in, retain minimal
+failure and performance events for at most 30 days, and exclude filenames,
+URLs, clipboard contents, object keys and credentials. Mandatory server-side
+quota, billing, reliability and abuse metering is separate from product
+telemetry. Customers initially receive only aggregate link access count and
+last-access time, never visitor identity.
 
 ## Go-to-market hypothesis
 
@@ -116,7 +125,7 @@ Likely channels:
 - developer communities using coding agents, terminals and remote boxes;
 - integrations for Raycast, Alfred, Shortcuts and Herdr;
 - clear comparison pages that acknowledge direct alternatives honestly;
-- an open or inspectable CLI contract, depending on licensing strategy.
+- an open CLI and documented integration contract.
 
 Search positioning should target the job (“clipboard file to link,” “Mac upload
 hotkey,” “S3 clipboard uploader”) while the brand remains broad enough for the

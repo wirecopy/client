@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SERVICE=$(CDPATH= cd -- "$ROOT/../../service" && pwd)
+PORT=${WIRECOPY_SMOKE_PORT:-3101}
+SERVER="http://127.0.0.1:$PORT"
+TMP=$(mktemp -d)
+SERVER_PID=""
+
+cleanup() {
+  if [ -n "$SERVER_PID" ]; then kill "$SERVER_PID" 2>/dev/null || true; fi
+  (cd "$SERVICE" && mise x -- bin/rails runner 'DeviceToken.where(name: "Native integration smoke").delete_all') >/dev/null 2>&1 || true
+  rm -rf "$TMP"
+}
+trap cleanup EXIT INT TERM
+
+cd "$SERVICE"
+docker compose up -d --wait postgres minio >/dev/null
+mise x -- bin/rails db:prepare db:seed storage:setup >/dev/null
+mise x -- bin/rails server -b 127.0.0.1 -p "$PORT" -P "$TMP/server.pid" >"$TMP/rails.log" 2>&1 &
+SERVER_PID=$!
+
+attempt=0
+until curl -fsS "$SERVER/up" >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -gt 40 ]; then cat "$TMP/rails.log"; exit 1; fi
+  sleep 0.25
+done
+
+TOKEN=$(mise x -- bin/rails runner 'DeviceToken.where(name: "Native integration smoke").delete_all; _, token = DeviceToken.issue!(user: User.find_by!(email: "maker@wirecopy.local"), name: "Native integration smoke"); print token')
+printf 'native Wirecopy payload %s\n' "$(date +%s)" > "$TMP/payload.txt"
+
+cd "$ROOT"
+swift build >/dev/null
+RESULT=$(WIRECOPY_SERVER="$SERVER" WIRECOPY_TOKEN="$TOKEN" .build/debug/WirecopyCLI publish "$TMP/payload.txt" --json 2>"$TMP/cli.log")
+LINK=$(printf '%s' "$RESULT" | ruby -rjson -e 'print JSON.parse(STDIN.read).fetch("url")')
+REMOTE_ID=$(printf '%s' "$RESULT" | ruby -rjson -e 'print JSON.parse(STDIN.read).fetch("remoteID")')
+curl -fsSL "$LINK" -o "$TMP/downloaded.txt"
+cmp "$TMP/payload.txt" "$TMP/downloaded.txt"
+WIRECOPY_SERVER="$SERVER" WIRECOPY_TOKEN="$TOKEN" .build/debug/WirecopyCLI links revoke "$REMOTE_ID" >/dev/null
+STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$LINK")
+[ "$STATUS" = "410" ]
+
+echo "PASS: native CLI → Rails API → MinIO → scan → public download → revoke"

@@ -8,120 +8,185 @@ legal review.
 
 ## Trust boundaries
 
-- The Mac client handles local files, pasteboard contents and user credentials.
-- The application API authenticates accounts and authorizes upload/link actions.
-- Object storage holds untrusted user-controlled bytes.
-- The public content domain serves requests from unauthenticated recipients.
-- Payment, email and scanning vendors receive specifically inventoried data.
-- S3-compatible destinations may be entirely outside the managed service.
+- The Mac client handles local files, pasteboard contents, Keychain credentials
+  and a scoped Rails device token.
+- Clerk authenticates account sign-in; Rails independently authorizes every API
+  operation and owns device-token revocation.
+- The Rails service owns upload intent, quota, link and lifecycle state in
+  PostgreSQL.
+- Private R2 stores untrusted bytes; local development substitutes MinIO.
+- Isolated ClamAV workers read quarantined content and return a verdict.
+- The public link host accepts bearer tokens and redirects allowed requests to
+  short-lived signed object URLs.
+- Dodo Payments processes checkout and subscription state as merchant of record.
+- BYOS destinations may be entirely outside the managed service.
 
-Each boundary needs documented inputs, authentication, logging and retention.
+Each boundary requires documented inputs, authentication, logging, data
+retention and failure behavior.
 
 ## Client requirements
 
-- Store S3 credentials, service tokens and encryption keys in Keychain.
-- Never include secrets, raw Authorization headers or signed URL query strings
-  in ordinary logs.
-- Validate endpoint schemes and explain custom certificate failures.
+- Store S3 credentials and Rails device tokens in Keychain.
+- Never log secrets, raw authorization headers, bearer links, object keys or
+  signed URL query strings.
+- Validate custom endpoint schemes and explain certificate failures.
 - Bound temporary disk use and remove prepared files after completion/failure.
-- Detect source-file changes while uploading when practical.
-- Require explicit consent before enabling Accessibility-driven auto-insert.
-- Sign and notarize releases; publish checksums for direct downloads.
-- Design automatic updates with signature verification and rollback behavior.
+- Detect source-file changes during upload when practical.
+- Require explicit consent for Accessibility-driven auto-insert.
+- Sign and notarize releases; publish checksums for release archives.
+- Treat Homebrew as the update mechanism for Cask installations; the app may
+  notify but must not replace a Cask-managed installation itself.
 
-## Upload authorization
+## Authentication and device authorization
 
-Managed upload grants should be:
+Clerk sessions bootstrap device authorization; they are not permanent API
+credentials. Rails verifies issuer, audience, signature, time claims and account
+mapping, then issues a scoped random token whose plaintext is shown only once.
+Rails stores a digest; the Mac stores the token in Keychain.
 
-- short-lived;
-- single-purpose and scoped to one unpredictable object key;
-- constrained by account quota and expected size;
-- unusable for listing, reading or overwriting unrelated objects;
+Users can list, name and revoke devices. Logout, lost-device response and
+account deletion revoke the relevant tokens immediately. Every intent, link,
+quota and analytics endpoint has cross-account authorization tests. Clerk and
+Dodo webhooks require signature verification, replay resistance and idempotent
+handling.
+
+## Upload grants
+
+Managed upload grants are:
+
+- short-lived, single-purpose and scoped to one unpredictable object key;
+- limited to one upload method and unable to list, read or overwrite unrelated
+  objects;
+- constrained by quota and expected size before issue;
+- verified with trusted object metadata after upload;
 - recorded as an intent that can be reconciled;
 - safely retryable without multiplying public links.
 
-Do not trust client-declared MIME type, file extension or successful completion.
-Verify object existence and size before activating a link.
+The service tests completion before upload, duplicate completion, stale grants,
+replay, wrong key/size/type/checksum, clock skew and orphan cleanup. The client
+never receives managed R2 credentials, and Rails does not proxy normal bytes.
 
-## Link security
+## Quarantine and malware scanning
 
-- Use high-entropy, non-sequential public identifiers.
-- Keep managed objects private; authorize access at the link service.
-- Enforce expiration, revocation and deletion for every request.
-- Hash passwords using an appropriate password-hashing function.
-- Rate-limit password attempts and high-volume enumeration patterns.
-- Avoid leaking private filenames in URLs unless the user chooses that behavior.
-- Serve content on a domain isolated from application cookies and privileged
-  browser capabilities.
-- Set safe content type, sniffing and disposition headers.
+Completing an upload moves it into quarantine, never directly to availability.
+An isolated ClamAV container scans the full object. Production fails closed when
+the scanner is unavailable, times out, returns malformed output or has
+unacceptable signature freshness.
 
-Presigned S3 URLs are bearer credentials. Their query values must be treated as
-secrets until expiration and their maximum lifetime communicated to the user.
+The initial service rejects malware, encrypted archives and exhausted scan
+errors. Archive depth, extracted-size and scan-time limits must prevent archive
+bombs. Scan jobs are idempotent across retries and worker termination. Stored
+scan metadata contains the verdict, engine/signature version and time, not file
+content.
+
+Local development keeps PostgreSQL and MinIO as the only default Compose
+services. A scanner fake covers ordinary tests; an opt-in ClamAV profile and CI
+job must cover clean files, EICAR, timeout and scanner-down behavior. A deployed
+environment must refuse to boot with scanning bypass enabled.
+
+## Link security and delivery
+
+- Use at least 128 bits of entropy in non-sequential managed bearer tokens.
+- Keep objects private and enforce `available`, expiration, revocation, deletion
+  and abuse state for every resolution.
+- Return a very-short-lived R2 GET URL only after an allowed resolution.
+- Keep the signed GET lifetime within the documented revoke propagation target.
+- Do not put link tokens in ordinary logs, telemetry, referrers or error reports.
+- Isolate application cookies from `links.wirecopy.app` and the R2 origin.
+- Apply safe content type, `nosniff`, disposition, cache and referrer headers.
+- Render inline only the reviewed image allowlist; force HTML, SVG, unknown and
+  other active formats to download.
+
+Invalid, quarantined and unavailable tokens return responses that do not make
+enumeration easier. Browser tests verify cookie isolation and safe handling of
+polyglot and active content.
+
+The initial product does not offer passwords or client-side encrypted links.
+Before either is promised, specify and independently review password hashing,
+attempt limiting, encryption framing, key handling, streaming integrity,
+metadata leakage, recovery and the loss of server-side scanning.
 
 ## Abuse controls
 
-The service needs layered controls:
+The managed service uses layered controls:
 
-- authenticated accounts for managed uploads;
-- per-account and per-network rate and byte limits;
-- size/type policies and archive handling rules;
-- malware detection appropriate to the privacy mode;
-- automated response to abnormal download traffic;
-- a report-abuse path attached to hosted links;
+- authenticated accounts for uploads;
+- per-account and per-network request and byte limits;
+- explicit size, type and archive policies;
+- quarantine and fail-closed malware scanning;
+- abnormal download detection and response;
+- a report-abuse path attached to every hosted link;
 - takedown, appeal, repeat-abuser and law-enforcement procedures;
 - deletion and evidence-preservation rules;
 - payment fraud and disposable-account defenses.
 
-Avoid promising unlimited uploads, permanent free hosting or unrestricted
+Do not promise unlimited uploads, permanent free hosting or unrestricted
 anonymous accounts.
 
-## Privacy modes
+## Analytics and privacy
 
-### Standard managed link
+Separate four data classes:
 
-The service can inspect enough metadata/content to enforce policy and optionally
-produce previews. The privacy notice must enumerate collection and retention.
+1. local app state and BYOS history, which remain on the Mac;
+2. optional diagnostic telemetry, explicitly enabled in settings and retained
+   for at most 30 days;
+3. mandatory managed-service quota, billing, reliability and abuse records;
+4. customer-visible aggregate link access count and last-access time.
 
-### Client-side encrypted link
+Optional diagnostics contain minimal failure and performance events and exclude
+filenames, URLs, clipboard contents, object keys and credentials. Brief IP and
+user-agent records used for managed-service abuse defense expire within 30 days
+and are not exposed to customers as visitor identity. The privacy inventory
+must match actual Rails, Clerk, Dodo, R2 and ClamAV flows.
 
-The client encrypts content before upload and places the decryption secret in
-the URL fragment so it is not sent to the server during a normal request.
-Before offering this mode, specify and review:
+## Account deletion and recovery
 
-- algorithms, versioning and authenticated-encryption framing;
-- key generation and encoding;
-- large-file streaming and integrity behavior;
-- recipient browser implementation;
-- filename and metadata leakage;
-- password interaction and recovery expectations;
-- inability to perform server-side preview or content scanning;
-- abuse response for opaque content;
-- link forwarding and referrer behavior.
+Account deletion immediately revokes links and all Rails device tokens, blocks
+new uploads, cancels incomplete workflows and schedules active/quarantined R2
+objects for deletion within 24 hours. Partial provider failures are retried and
+reconciled.
 
-“Encrypted” must not be used in product copy until this protocol is implemented,
-tested and reviewed.
+PostgreSQL WAL and daily base backups are encrypted, stored in a separate R2
+bucket and expire within 30 days. Weekly isolated restores must demonstrate the
+15-minute RPO and four-hour RTO. Restores must not reactivate deleted, revoked or
+expired links or tokens, and must preserve deletion tombstones long enough to
+prevent resurrection.
 
 ## BYOS boundaries
 
-For user-owned S3-compatible storage:
-
-- credentials remain on the user's Mac unless a separately disclosed service
-  requires them;
-- the app should request the smallest practical permission set;
-- public-bucket configuration and signed-link behavior are clearly distinguished;
-- deleting local history must not imply that the remote object was deleted;
-- remote deletion failures remain visible and retryable;
-- custom endpoints are untrusted network destinations.
+- Credentials remain on the user's Mac unless a separately disclosed service
+  requires them.
+- The app requests the smallest practical permission set.
+- Public-bucket and signed-link behavior remain visibly distinct.
+- Deleting local history does not imply that a remote object was deleted.
+- Remote deletion failures remain visible and retryable.
+- Custom endpoints are untrusted network destinations.
+- Revocation and expiration controls appear only when the destination supports
+  them.
 
 ## Pre-beta security gates
 
-- structured threat model reviewed;
-- dependency and secret scanning in CI;
-- authentication and authorization tests for every link mutation;
-- upload-grant scope tests;
-- content-domain isolation verified in a browser;
-- lifecycle and deletion reconciliation tests;
-- log redaction tests;
-- malware/abuse handling runbook exercised;
-- privacy data inventory and retention schedule published;
-- independent security review for encryption or password-protected links.
+- structured threat model reviewed with no unresolved critical findings;
+- dependency, license and secret scanning in CI;
+- Clerk verification, device-token lifecycle and cross-account authorization
+  suites passing;
+- R2 and MinIO upload-grant conformance tests passing;
+- quarantine, EICAR, scanner-down and archive-limit tests passing;
+- bearer entropy, lifecycle, cookie-isolation and content-header browser tests
+  passing;
+- account deletion exercised across Rails, Clerk, Dodo and R2;
+- analytics data inventory and retention verified against real logs/events;
+- abuse, malware and takedown runbooks exercised;
+- weekly restore evidence meets the RPO/RTO;
+- independent review completed before password or encryption work ships.
+
+## Future active-site hosting boundary
+
+Publishing an HTML file as a rendered site is categorically different from
+forcing it to download. Owner-supplied JavaScript must run on a separate
+registrable domain with per-site origin isolation, no Wirecopy cookies and no
+privileged API CORS. ClamAV does not make arbitrary JavaScript trustworthy.
+Phishing detection, domain reputation, takedown and service-worker/browser-state
+isolation are required before the
+[static-site publishing exploration](static-site-publishing.md) can become a
+product capability.

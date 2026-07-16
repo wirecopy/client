@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+"$ROOT/scripts/build-app"
+APP="$ROOT/dist/Wirecopy.app"
+DESTINATION="$HOME/Applications/Wirecopy.app"
+mkdir -p "$HOME/Applications"
+rm -rf "$DESTINATION"
+ditto "$APP" "$DESTINATION"
+ln -sf "$DESTINATION/Contents/MacOS/wirecopy" "$ROOT/bin/wirecopy-release"
+echo "Installed $DESTINATION"
+echo "Open it with: open '$DESTINATION'"
