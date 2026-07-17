@@ -184,10 +184,22 @@ no interactive provider login. See [Automated testing harness](testing-harness.m
 
 ## Production deployment
 
-Kamal deploys the Rails image to an initial Hetzner VM. Rails web, Solid Queue,
-PostgreSQL and an isolated ClamAV container share that host for the first paid
-beta. This is a cost-conscious starting topology, not an assertion that the
-database will remain colocated indefinitely.
+Kamal deploys the Rails image from a developer machine to an initial Hetzner
+VM. Images are stored privately as `ghcr.io/wirecopy/service`. A non-root
+`deploy` user operates Docker, Kamal Proxy terminates TLS for `wirecopy.app`,
+and PostgreSQL 17 runs as a persistent accessory exposed only on loopback.
+Rails web and Solid Queue initially share the application container. This is a
+cost-conscious starting topology, not an assertion that the database or jobs
+will remain colocated indefinitely.
+
+The first production bring-up explicitly disables billing, malware scanning and
+static-site publishing. Billing remains off until Dodo production onboarding is
+complete. Disabling the scanner requires an explicit unsafe-operation
+acknowledgement and visible product disclosure; the paid public beta still
+requires the fail-closed scanning policy in decision 0006. Static-site
+publishing remains off until the isolated origin required by decision 0009 is
+available. See
+[decision 0010](decisions/0010-initial-production-deployment.md).
 
 Production storage is a private Cloudflare R2 bucket. PostgreSQL continuously
 archives WAL to a separate encrypted R2 backup bucket, creates daily base

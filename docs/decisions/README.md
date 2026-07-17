@@ -13,6 +13,8 @@ Decision records capture choices that should not be reopened accidentally.
 | [0007: Distribute the app and CLI in one Homebrew Cask](0007-homebrew-cask-and-cli.md) | Accepted |
 | [0008: Require a non-interactive verification harness](0008-automated-verification-harness.md) | Accepted |
 | [0009: Separate managed static-site publishing from file links](0009-managed-static-site-mode.md) | Accepted; tracer implemented |
+| [0010: Use Kamal and GHCR for the initial production deployment](0010-initial-production-deployment.md) | Accepted for production bring-up |
+| [0011: Launch managed cloud with email-code authentication](0011-email-code-launch-authentication.md) | Accepted for initial production launch |
 
 New records use the next four-digit number and contain context, decision,
 consequences and alternatives.

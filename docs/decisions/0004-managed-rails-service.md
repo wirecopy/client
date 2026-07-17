@@ -21,9 +21,11 @@ Build the private managed service as a Ruby on Rails 8.1 full-stack monolith.
 - Use Hotwire, Turbo and Stimulus for the account, analytics, billing and admin
   UI.
 - Use PostgreSQL as the authoritative metadata store and Solid Queue for jobs.
-- Use Clerk for Apple and GitHub sign-in. Rails exchanges a verified Clerk
-  session for its own revocable, scoped device token and remains the
-  authorization system of record.
+- Use Clerk for authentication. The initial production launch uses email
+  verification codes; Apple and GitHub are deferred by
+  [decision 0011](0011-email-code-launch-authentication.md). Rails exchanges a
+  verified Clerk session for its own revocable, scoped device token and remains
+  the authorization system of record.
 - Use Dodo Payments as merchant of record. Verified, idempotently processed
   webhooks determine subscription entitlement.
 - Use private Cloudflare R2 for managed objects behind an S3-compatible storage
