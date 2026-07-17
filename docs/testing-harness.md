@@ -136,6 +136,15 @@ real account login to verify core screens.
 - active JavaScript confined to a non-Wirecopy registrable domain;
 - BYOS capability detection that never labels a raw object base URL a website.
 
+The service's opt-in `script/live-site-smoke` tracer covers managed R2 without
+persisting credentials or fixtures. It publishes a single HTML file, an
+enclosing-folder ZIP and browser-style folder files; fetches HTML, CSS and
+JavaScript from distinct per-site origins; verifies status, MIME and marker
+bytes; and cleans up both activation descriptors and immutable prefixes in an
+`ensure` block. The 2026-07-17 run used a disposable `wirecopy.app` wildcard
+only to validate mechanics. Production evidence must use the separately
+registered artifact domain required by decision 0009.
+
 ## Machine-readable evidence
 
 Every run writes an artifact directory containing:

@@ -66,6 +66,38 @@ public struct ManagedLink: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+public struct PublishedSite: Codable, Identifiable, Hashable, Sendable {
+    public let id: Int
+    public let state: String
+    public let name: String
+    public let url: URL
+    public let byteSize: Int64
+    public let fileCount: Int
+    public let expiresAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, state, name, url
+        case byteSize = "byte_size"
+        case fileCount = "file_count"
+        case expiresAt = "expires_at"
+    }
+}
+
+public struct PreparedSite: Sendable {
+    public let archiveURL: URL
+    public let removeAfterUse: Bool
+
+    public init(archiveURL: URL, removeAfterUse: Bool) {
+        self.archiveURL = archiveURL
+        self.removeAfterUse = removeAfterUse
+    }
+
+    public func cleanup() {
+        guard removeAfterUse else { return }
+        try? FileManager.default.removeItem(at: archiveURL)
+    }
+}
+
 public struct PublishedLink: Codable, Identifiable, Hashable, Sendable {
     public let id: UUID
     public let remoteID: Int?
@@ -134,6 +166,7 @@ public enum WirecopyError: LocalizedError, Sendable {
     case api(code: String, message: String)
     case uploadRejected(status: Int)
     case scanTimedOut
+    case invalidSite(String)
 
     public var errorDescription: String? {
         switch self {
@@ -145,6 +178,7 @@ public enum WirecopyError: LocalizedError, Sendable {
         case .api(_, let message): message
         case .uploadRejected(let status): "Object storage rejected the upload (HTTP \(status))."
         case .scanTimedOut: "The safety check is taking longer than expected. The file remains quarantined."
+        case .invalidSite(let message): message
         }
     }
 }

@@ -65,16 +65,16 @@ versioned boundary is [`contracts/managed-api-v1.yaml`](contracts/managed-api-v1
 See the [macOS development guide](macos/README.md) for building, configuring,
 testing and installing the native app locally.
 
-## Next product exploration
+## Static-site publishing tracer
 
-Explore instant static-site publishing: select one HTML file or a folder with a
+The managed-service tracer now accepts one HTML file, ZIP, or folder with a
 root `index.html`, publish it, and receive a URL where the site is immediately
 live. Start with managed R2 storage and controlled routing because one known
 cloud environment makes domains, atomic activation, cache behavior and deletion
 testable. Then evaluate BYOS storage with either Wirecopy-managed routing or a
 fully user-owned website endpoint.
 
-This is an exploration, not an initial-release promise. Serving HTML means
+This remains a gated product surface, not a launch promise. Serving HTML means
 hosting active JavaScript, so it requires a dedicated cookie-isolated site
 domain, per-site origin isolation, atomic folder deployments and stronger abuse
 controls. See [Static-site publishing exploration](docs/static-site-publishing.md).

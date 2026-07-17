@@ -43,3 +43,19 @@ import Testing
     #expect(bytes.range(of: Data("report.txt".utf8)) != nil)
     #expect(bytes.range(of: Data("report-2.txt".utf8)) != nil)
 }
+
+@Test func siteFolderPreservesNestedPathsAndRequiresRootIndex() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let assets = root.appending(path: "assets", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("<script src=\"assets/app.js\"></script>".utf8).write(to: root.appending(path: "index.html"))
+    try Data("console.log('wirecopy')".utf8).write(to: assets.appending(path: "app.js"))
+    let archive = root.appending(path: "site.zip")
+
+    try DeterministicZip.createSite(from: root, at: archive)
+
+    let bytes = try Data(contentsOf: archive)
+    #expect(bytes.range(of: Data("index.html".utf8)) != nil)
+    #expect(bytes.range(of: Data("assets/app.js".utf8)) != nil)
+}

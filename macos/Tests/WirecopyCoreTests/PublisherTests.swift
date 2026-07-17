@@ -82,6 +82,19 @@ private actor FakeManagedAPI: ManagedAPI {
 
     func revoke(linkID: Int) async throws {}
 
+    func publishSite(archiveURL: URL, expiresIn: Int, progress: @escaping @Sendable (Double) -> Void) async throws -> PublishedSite {
+        progress(1)
+        return PublishedSite(
+            id: 1,
+            state: "published",
+            name: "site",
+            url: URL(string: "https://s-test.artifacts.example")!,
+            byteSize: 7,
+            fileCount: 1,
+            expiresAt: .now.addingTimeInterval(Double(expiresIn))
+        )
+    }
+
     private var availableIntent: UploadIntent {
         UploadIntent(
             id: "intent", state: "available", filename: "payload.txt", contentType: "text/plain", byteSize: 7,

@@ -22,10 +22,37 @@ struct WirecopyCLI {
             try configure(Array(arguments.dropFirst()))
         case "publish", "send":
             try await publish(Array(arguments.dropFirst()))
+        case "site":
+            try await publishSite(Array(arguments.dropFirst()))
         case "links":
             try await links(Array(arguments.dropFirst()))
         default:
             throw CLIError.usage("Unknown command: \(command)")
+        }
+    }
+
+    private static func publishSite(_ arguments: [String]) async throws {
+        let options = Options(arguments)
+        guard options.positionals.count == 1 else { throw CLIError.usage("site requires one HTML file, ZIP, or site folder") }
+        let inputURL = URL(fileURLWithPath: NSString(string: options.positionals[0]).expandingTildeInPath)
+        let prepared = try SiteInputPreparer.prepare(inputURL)
+        defer { prepared.cleanup() }
+
+        let configuration = try WirecopyConfiguration.load()
+        let expiresIn = options.value("--expires").flatMap(Int.init) ?? configuration.expiresIn
+        let api = ManagedAPIClient(baseURL: configuration.serverURL, token: configuration.token)
+        let site = try await api.publishSite(archiveURL: prepared.archiveURL, expiresIn: expiresIn) { value in
+            let label = "Publishing site \(Int(value * 100))%"
+            FileHandle.standardError.write(Data("\r\(label.padding(toLength: 32, withPad: " ", startingAt: 0))".utf8))
+        }
+        FileHandle.standardError.write(Data("\n".utf8))
+        if options.has("--json") {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.sortedKeys]
+            print(String(decoding: try encoder.encode(site), as: UTF8.self))
+        } else {
+            print(site.url.absoluteString)
         }
     }
 
@@ -105,6 +132,7 @@ struct WirecopyCLI {
       wirecopy configure --server http://localhost:3000 --token wc_live_… [--expires 86400]
       wirecopy publish <path> [more paths] [--expires seconds] [--format raw|markdown|html|json]
       wirecopy publish --clipboard [--json]
+      wirecopy site <index.html|site.zip|folder> [--expires seconds] [--json]
       wirecopy links [--json]
       wirecopy links revoke <id>
 

@@ -9,13 +9,45 @@ public enum DeterministicZip {
     }
 
     public static func create(from urls: [URL], at destination: URL) throws {
+        var usedNames: Set<String> = []
+        let sources = urls.sorted(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }).map { url in
+            (url, uniqueName(url.lastPathComponent, used: &usedNames))
+        }
+        try create(from: sources, at: destination)
+    }
+
+    public static func createSite(from directory: URL, at destination: URL) throws {
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { throw WirecopyError.invalidSite("Wirecopy could not read this site folder.") }
+
+        var sources: [(URL, String)] = []
+        for case let url as URL in enumerator {
+            let values = try url.resourceValues(forKeys: Set(keys))
+            if values.isSymbolicLink == true { throw WirecopyError.invalidSite("Site folders cannot contain symbolic links.") }
+            guard values.isRegularFile == true else { continue }
+            let prefix = directory.standardizedFileURL.path + "/"
+            let path = url.standardizedFileURL.path.replacingOccurrences(of: prefix, with: "", options: .anchored)
+            guard !path.isEmpty, !path.split(separator: "/").contains("..") else {
+                throw WirecopyError.invalidSite("The site folder contains an unsafe path.")
+            }
+            sources.append((url, path))
+        }
+        guard sources.contains(where: { $0.1 == "index.html" }) else {
+            throw WirecopyError.invalidSite("The site folder needs an index.html file at its root.")
+        }
+        try create(from: sources.sorted(by: { $0.1 < $1.1 }), at: destination)
+    }
+
+    private static func create(from sources: [(URL, String)], at destination: URL) throws {
         var archive = Data()
         var entries: [Entry] = []
-        var usedNames: Set<String> = []
 
-        for url in urls.sorted(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }) {
+        for (url, filename) in sources {
             let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
-            let filename = uniqueName(url.lastPathComponent, used: &usedNames)
             let name = Data(filename.utf8)
             let offset = UInt32(archive.count)
             let crc = crc32(bytes)

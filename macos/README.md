@@ -51,8 +51,8 @@ the inline `Delete?` confirmation.
 
 Plain text is deliberately ignored. Multiple files are packaged into a
 byte-for-byte deterministic, uncompressed ZIP. Folders remain outside the
-ordinary file-link workflow while the isolated static-site publishing model is
-explored.
+ordinary file-link workflow. The explicit CLI `site` command can package a
+folder with a root `index.html` and publish it to an isolated managed origin.
 
 ## Visual verification harness
 
@@ -81,6 +81,8 @@ During development, use the wrapper:
 ./bin/wirecopy publish ~/Desktop/report.pdf
 ./bin/wirecopy publish one.png two.pdf --format markdown
 ./bin/wirecopy publish --clipboard --json
+./bin/wirecopy site ./dist
+./bin/wirecopy site ./prototype.zip --json
 ./bin/wirecopy links
 ./bin/wirecopy links revoke 123
 ```
@@ -88,6 +90,10 @@ During development, use the wrapper:
 `WIRECOPY_SERVER`, `WIRECOPY_TOKEN` and `WIRECOPY_EXPIRES_IN` override stored
 configuration, which makes CI and self-built clients noninteractive. Progress
 goes to stderr; the link or JSON result goes to stdout.
+
+`wirecopy site` accepts one `.html`, `.htm`, `.zip`, or folder. Folder paths are
+preserved in a deterministic ZIP and the managed API receives an explicit
+`mode=site`; ordinary `wirecopy publish index.html` remains a file link.
 
 ## Tests and real-service verification
 

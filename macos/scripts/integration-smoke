@@ -9,9 +9,15 @@ TMP=$(mktemp -d)
 SERVER_PID=""
 
 cleanup() {
+  STATUS=$?
   if [ -n "$SERVER_PID" ]; then kill "$SERVER_PID" 2>/dev/null || true; fi
   (cd "$SERVICE" && mise x -- bin/rails runner 'DeviceToken.where(name: "Native integration smoke").delete_all') >/dev/null 2>&1 || true
+  if [ "$STATUS" -ne 0 ]; then
+    [ ! -f "$TMP/rails.log" ] || tail -n 80 "$TMP/rails.log" >&2
+    [ ! -f "$TMP/cli.log" ] || tail -n 40 "$TMP/cli.log" >&2
+  fi
   rm -rf "$TMP"
+  exit "$STATUS"
 }
 trap cleanup EXIT INT TERM
 
@@ -42,4 +48,16 @@ WIRECOPY_SERVER="$SERVER" WIRECOPY_TOKEN="$TOKEN" .build/debug/WirecopyCLI links
 STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$LINK")
 [ "$STATUS" = "410" ]
 
-echo "PASS: native CLI → Rails API → MinIO → scan → public download → revoke"
+mkdir -p "$TMP/site/assets"
+printf '<!doctype html><script src="assets/app.js"></script><h1>Wirecopy site smoke</h1>\n' > "$TMP/site/index.html"
+printf 'document.documentElement.dataset.wirecopy = "site-smoke"\n' > "$TMP/site/assets/app.js"
+SITE_RESULT=$(WIRECOPY_SERVER="$SERVER" WIRECOPY_TOKEN="$TOKEN" .build/debug/WirecopyCLI site "$TMP/site" --json 2>>"$TMP/cli.log")
+SITE_LINK=$(printf '%s' "$SITE_RESULT" | ruby -rjson -e 'print JSON.parse(STDIN.read).fetch("url")')
+SITE_ID=$(printf '%s' "$SITE_RESULT" | ruby -rjson -e 'print JSON.parse(STDIN.read).fetch("id")')
+curl -fsS "$SITE_LINK" | grep -q "Wirecopy site smoke"
+curl -fsS "${SITE_LINK%/}/assets/app.js" | grep -q "site-smoke"
+curl -fsS -X DELETE -H "Authorization: Bearer $TOKEN" "$SERVER/api/v1/sites/$SITE_ID" >/dev/null
+SITE_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$SITE_LINK")
+[ "$SITE_STATUS" = "410" ]
+
+echo "PASS: native CLI → Rails API → MinIO → file link + isolated static site → revoke/delete"

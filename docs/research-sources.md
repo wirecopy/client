@@ -46,6 +46,18 @@ publication.
 - [Cloudflare Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/)
   — static-asset deployment and routing modes to compare with an R2-backed site
   router.
+- [Cloudflare Workers routes](https://developers.cloudflare.com/workers/configuration/routing/routes/)
+  — wildcard host routes require a proxied DNS record and can dispatch dynamic
+  per-site subdomains.
+- [Cloudflare Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
+  — custom domains provision DNS/TLS automatically but match exact hostnames
+  and do not support wildcard DNS records.
+- [Apache OpenDAL Ruby binding](https://opendal.apache.org/docs/bindings/ruby/)
+  — synchronous Ruby access to many storage services, streaming IO,
+  middleware and capability checks.
+- [Apache OpenDAL Ruby common tasks](https://opendal.apache.org/docs/bindings/ruby/tasks/)
+  — chunked readers/writers, listing and tree deletion used to shape the BYOS
+  adapter boundary.
 - [Rails Active Storage overview](https://guides.rubyonrails.org/active_storage_overview.html)
   — S3-compatible endpoints, private objects and direct uploads.
 - [Kamal deployment documentation](https://kamal-deploy.org/)

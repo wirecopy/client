@@ -1,4 +1,12 @@
-# Static-site publishing exploration
+# Static-site publishing
+
+> Implementation status (2026-07-17): the Rails tracer accepts one HTML file,
+> a ZIP, or a browser-selected folder; validates and streams its assets to an
+> immutable storage prefix; and activates a manifest descriptor. A disposable
+> `s-<token>.wirecopy.app` route proved the live R2/Worker mechanics and removed
+> its fixtures afterward. Production remains blocked on a separate registrable
+> artifact domain. See
+> [decision 0009](decisions/0009-managed-static-site-mode.md).
 
 ## Product hypothesis
 
@@ -6,9 +14,14 @@ The next product evolution to explore is instant web publishing: select one HTML
 file or a folder containing HTML, publish it, and receive a URL where the result
 is immediately rendered as a website.
 
-This is not part of the initial file-link release. It is a separate publishing
+This is a separate publishing
 mode because HTML executes active code, folders introduce routing semantics and
 site updates need atomic deployment rather than one-object link delivery.
+
+The mode is always explicit. An uploaded `.html` remains an ordinary file link
+unless the request selects `site`; extension-based auto-preview is prohibited.
+The bundled CLI exposes that choice as `wirecopy site <html|zip|folder>` and
+packages folders without changing the menu-bar shortcut's file-link behavior.
 
 ## Recommended exploration order
 
@@ -28,7 +41,7 @@ The first step is recommended because domain provisioning, index routing,
 atomic activation, cache invalidation and deletion can be tested as one known
 system. It does not make managed storage the permanent or only site mode.
 
-## Proposed managed mechanics
+## Managed mechanics
 
 ### Prepare
 
@@ -57,7 +70,9 @@ Mac client          Rails API             Private R2          Site router
     │◀─ public site URL ─│                     │                    │
 ```
 
-Each deployment uploads into a new immutable prefix. The router serves only the
+Each deployment uploads into a new immutable prefix. The current tracer writes
+the activation descriptor under `wirecopy-sites/index/<token>.json` only after
+all manifest assets are stored. The router serves only the
 active verified manifest. Switching the active manifest is atomic, so visitors
 never see a half-uploaded folder. Previous prefixes have bounded rollback
 retention and are later purged.
@@ -85,9 +100,9 @@ redirect or atomic-deployment behavior.
 
 User HTML can run arbitrary JavaScript. It must not be served from
 `wirecopy.app`, any hostname that can receive Wirecopy cookies, or the ordinary
-managed file-link origin. A separate registrable domain is the recommended
-security boundary; selecting and registering it is an open decision that
-supersedes the current one-domain assumption only if this experiment proceeds.
+managed file-link origin. A separate registrable domain is the required
+production security boundary; selecting and registering it remains an open
+release gate.
 
 The site origin receives:
 
@@ -102,7 +117,7 @@ ClamAV is not a malicious-JavaScript detector. The product is intentionally
 hosting owner-supplied active content, so acceptable-use, phishing detection,
 rate limits, domain reputation and rapid takedown are core prototype gates.
 
-## BYOS mechanics to investigate
+## BYOS boundary
 
 The S3 API does not guarantee a website endpoint or common routing behavior.
 Provider capability discovery must distinguish:
@@ -114,11 +129,11 @@ Provider capability discovery must distinguish:
 - cache purge and atomic version switching;
 - delete/revoke support.
 
-The app may publish a manifest and objects to any compatible bucket, but it must
-not promise a working website unless a reachable public origin and routing mode
-are verified. A managed router in front of user-owned storage is a distinct
-hybrid service, not pure BYOS, and would require scoped read access or signed
-origin requests.
+OpenDAL normalizes object operations and exposes backend capabilities, not
+website hosting. A BYOS publication therefore remains an ordinary download link
+unless the user configures a reachable public origin and a provider-specific
+adapter verifies its routing mode. Wirecopy does not supply its managed preview
+hostname for arbitrary user-owned backends.
 
 ## Prototype scope
 
@@ -151,7 +166,7 @@ behavior. A successful series of S3 PUTs is not enough.
 
 ## Decisions required after the prototype
 
-- dedicated registrable domain and per-site hostname scheme;
+- exact dedicated registrable domain and per-site hostname scheme;
 - Rails/R2 router versus Workers Static Assets;
 - static multi-page only versus optional SPA fallback;
 - file-count, byte, retention and deployment-history limits;

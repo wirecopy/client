@@ -12,6 +12,7 @@ Decision records capture choices that should not be reopened accidentally.
 | [0006: Set the initial managed-cloud plans and lifecycle policy](0006-managed-beta-policy.md) | Accepted for beta validation |
 | [0007: Distribute the app and CLI in one Homebrew Cask](0007-homebrew-cask-and-cli.md) | Accepted |
 | [0008: Require a non-interactive verification harness](0008-automated-verification-harness.md) | Accepted |
+| [0009: Separate managed static-site publishing from file links](0009-managed-static-site-mode.md) | Accepted; tracer implemented |
 
 New records use the next four-digit number and contain context, decision,
 consequences and alternatives.

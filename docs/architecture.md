@@ -207,6 +207,7 @@ versioned before integrations depend on them.
 ```bash
 wirecopy publish ./diagram.png --preset quick --format markdown
 wirecopy publish --clipboard --json
+wirecopy site ./dist --json
 wirecopy links revoke <id>
 ```
 
@@ -238,3 +239,12 @@ static-site folder to managed R2, followed by capability-aware BYOS modes. It is
 specified separately in
 [Static-site publishing exploration](static-site-publishing.md) because active
 HTML cannot use the ordinary download origin or lifecycle unchanged.
+
+The first tracer is now implemented with explicit `file` and `site` modes.
+Managed site mode stores immutable assets and a last-written activation
+descriptor in R2; a Cloudflare Worker serves manifest-listed paths from a
+separate `s-<token>.<artifact-domain>` origin per deployment. The artifact
+domain is a different registrable domain from `wirecopy.app`. OpenDAL is
+reserved for capability-aware BYOS object operations and does not imply a
+preview URL. See
+[decision 0009](decisions/0009-managed-static-site-mode.md).

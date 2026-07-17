@@ -7,6 +7,7 @@ public protocol ManagedAPI: Sendable {
     func intent(id: String) async throws -> UploadIntent
     func links() async throws -> [ManagedLink]
     func revoke(linkID: Int) async throws
+    func publishSite(archiveURL: URL, expiresIn: Int, progress: @escaping @Sendable (Double) -> Void) async throws -> PublishedSite
 }
 
 public final class ManagedAPIClient: ManagedAPI, @unchecked Sendable {
@@ -76,6 +77,31 @@ public final class ManagedAPIClient: ManagedAPI, @unchecked Sendable {
         let _: EmptyResponse = try await request(path: "/api/v1/links/\(linkID)", method: "DELETE")
     }
 
+    public func publishSite(archiveURL: URL, expiresIn: Int, progress: @escaping @Sendable (Double) -> Void) async throws -> PublishedSite {
+        let boundary = "wirecopy-\(UUID().uuidString)"
+        let multipartURL = try MultipartFile.build(archiveURL: archiveURL, expiresIn: expiresIn, boundary: boundary)
+        defer { try? FileManager.default.removeItem(at: multipartURL) }
+
+        guard let url = URL(string: "/api/v1/sites", relativeTo: baseURL) else { throw WirecopyError.invalidServerResponse }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        let delegate = UploadProgressDelegate(progress: progress)
+        let (data, response) = try await session.upload(for: request, fromFile: multipartURL, delegate: delegate)
+        guard let http = response as? HTTPURLResponse else { throw WirecopyError.invalidServerResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data)
+            throw WirecopyError.api(
+                code: envelope?.error.code ?? "http_\(http.statusCode)",
+                message: envelope?.error.message ?? "Wirecopy site publication failed (HTTP \(http.statusCode))."
+            )
+        }
+        return try decoder.decode(PublishedSite.self, from: data)
+    }
+
     private func request<Response: Decodable>(path: String, method: String = "GET", body: Data? = nil) async throws -> Response {
         guard let url = URL(string: path, relativeTo: baseURL) else { throw WirecopyError.invalidServerResponse }
         var request = URLRequest(url: url)
@@ -98,6 +124,34 @@ public final class ManagedAPIClient: ManagedAPI, @unchecked Sendable {
             )
         }
         return try decoder.decode(Response.self, from: data)
+    }
+}
+
+private enum MultipartFile {
+    static func build(archiveURL: URL, expiresIn: Int, boundary: String) throws -> URL {
+        let outputURL = FileManager.default.temporaryDirectory.appending(path: "wirecopy-site-request-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+        let output = try FileHandle(forWritingTo: outputURL)
+        defer { try? output.close() }
+
+        try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"site[mode]\"\r\n\r\nsite\r\n", to: output)
+        try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"site[expires_in]\"\r\n\r\n\(expiresIn)\r\n", to: output)
+
+        let filename = archiveURL.lastPathComponent.replacingOccurrences(of: "\"", with: "_")
+        let contentType = archiveURL.pathExtension.lowercased() == "zip" ? "application/zip" : "text/html"
+        try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"site[archive]\"; filename=\"\(filename)\"\r\nContent-Type: \(contentType)\r\n\r\n", to: output)
+
+        let input = try FileHandle(forReadingFrom: archiveURL)
+        defer { try? input.close() }
+        while let chunk = try input.read(upToCount: 64 * 1024), !chunk.isEmpty {
+            try output.write(contentsOf: chunk)
+        }
+        try write("\r\n--\(boundary)--\r\n", to: output)
+        return outputURL
+    }
+
+    private static func write(_ value: String, to handle: FileHandle) throws {
+        try handle.write(contentsOf: Data(value.utf8))
     }
 }
 

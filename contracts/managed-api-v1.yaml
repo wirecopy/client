@@ -3,14 +3,17 @@ info:
   title: Wirecopy Managed API
   version: 1.0.0
   description: Versioned contract used by the native app and standalone CLI.
+  license:
+    name: Apache License 2.0
+    identifier: Apache-2.0
 servers:
   - url: https://api.wirecopy.app
-  - url: http://localhost:3000
 security:
   - deviceToken: []
 paths:
   /api/v1/upload_intents:
     post:
+      summary: Create a direct file-upload intent
       operationId: createUploadIntent
       requestBody:
         required: true
@@ -34,6 +37,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/IntentID'
     get:
+      summary: Read an upload intent
       operationId: getUploadIntent
       responses:
         '200':
@@ -46,6 +50,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/IntentID'
     post:
+      summary: Complete a direct file upload
       operationId: completeUploadIntent
       description: Idempotently verifies an uploaded object and starts or observes quarantine scanning.
       responses:
@@ -58,6 +63,7 @@ paths:
         '422': { $ref: '#/components/responses/Error' }
   /api/v1/links:
     get:
+      summary: List recent managed links
       operationId: listLinks
       responses:
         '200':
@@ -71,8 +77,10 @@ paths:
                   links:
                     type: array
                     items: { $ref: '#/components/schemas/ManagedLink' }
+        '401': { $ref: '#/components/responses/Error' }
   /api/v1/links/{id}:
     delete:
+      summary: Revoke a managed link
       operationId: revokeLink
       parameters:
         - name: id
@@ -81,6 +89,47 @@ paths:
           schema: { type: integer }
       responses:
         '204': { description: Link revoked }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/sites:
+    post:
+      summary: Publish a static site
+      operationId: publishSite
+      description: Publishes one HTML file or ZIP as an isolated static site. Mode must be explicit.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [site]
+              properties:
+                site:
+                  type: object
+                  required: [mode, archive]
+                  properties:
+                    mode: { type: string, const: site }
+                    archive: { type: string, format: binary }
+                    expires_in: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Activated static-site deployment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublishedSite' }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/v1/sites/{id}:
+    delete:
+      summary: Delete a static site
+      operationId: deleteSite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204': { description: Site and all managed assets deleted }
         '404': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
@@ -105,10 +154,22 @@ components:
       type: object
       required: [filename, content_type, byte_size]
       properties:
+        mode: { type: string, enum: [file], default: file }
         filename: { type: string, minLength: 1 }
         content_type: { type: string }
         byte_size: { type: integer, minimum: 1 }
         expires_in: { type: integer, minimum: 1 }
+    PublishedSite:
+      type: object
+      required: [id, state, name, url, byte_size, file_count, expires_at]
+      properties:
+        id: { type: integer }
+        state: { type: string, enum: [published] }
+        name: { type: string }
+        url: { type: string, format: uri }
+        byte_size: { type: integer, minimum: 1 }
+        file_count: { type: integer, minimum: 1 }
+        expires_at: { type: string, format: date-time }
     UploadIntent:
       type: object
       required: [id, state, filename, content_type, byte_size, expires_at]
