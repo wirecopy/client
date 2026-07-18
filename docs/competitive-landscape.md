@@ -32,7 +32,7 @@ change; recheck the linked primary sources before publishing a comparison.
 | Clipboard image upload | Expected | Extend the same command to Finder files and multiple representations. |
 | S3-compatible storage | Established | Make provider setup unusually clear and storage mode interchangeable. |
 | Hosted storage | Established | Differentiate on lifecycle, transparent limits, privacy and developer workflow. |
-| Expiring or signed links | Established | Provide understandable policy presets and visible status in history. |
+| Expiring or signed links | Established | Ship a clear default expiry now; add understandable policy presets (planned, not yet implemented) and visible status in history. |
 | History and deletion | Expected | Treat history as a control plane, not a media library. |
 | Screenshot editing | Highly competitive | Integrate with existing capture tools instead of rebuilding them initially. |
 | Markdown output | Available in parts of the market | Make output formatting a first-class, scriptable publishing step. |

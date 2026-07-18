@@ -2,6 +2,9 @@
 
 - Status: Accepted for product research
 - Date: 2026-07-15
+- Status note (2026-07-18): the policy presets named below remain
+  unimplemented; the shipped client exposes a single default expiry. The
+  shared-domain-model decision itself is unchanged.
 
 ## Context
 

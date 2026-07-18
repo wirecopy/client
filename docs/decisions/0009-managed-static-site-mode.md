@@ -2,6 +2,10 @@
 
 - Status: Accepted and implemented as a local/live tracer
 - Date: 2026-07-17
+- Amended by: [0014](0014-governed-byos-site-delivery.md), which supersedes the
+  Cloudflare Worker serving topology below and the "BYOS receives no managed
+  preview URL" stance. The explicit `file`/`site` mode split and the
+  separate-registrable-domain requirement still hold.
 
 ## Context
 

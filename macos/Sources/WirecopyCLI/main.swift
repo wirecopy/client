@@ -35,15 +35,24 @@ struct WirecopyCLI {
         let options = Options(arguments)
         guard options.positionals.count == 1 else { throw CLIError.usage("site requires one HTML file, ZIP, or site folder") }
         let inputURL = URL(fileURLWithPath: NSString(string: options.positionals[0]).expandingTildeInPath)
+        let storage = options.value("--storage")
+        if let storage, !["managed", "byos"].contains(storage) {
+            throw CLIError.usage("--storage must be managed or byos")
+        }
         let prepared = try SiteInputPreparer.prepare(inputURL)
         defer { prepared.cleanup() }
 
         let configuration = try WirecopyConfiguration.load()
         let expiresIn = options.value("--expires").flatMap(Int.init) ?? configuration.expiresIn
         let api = ManagedAPIClient(baseURL: configuration.serverURL, token: configuration.token)
-        let site = try await api.publishSite(archiveURL: prepared.archiveURL, expiresIn: expiresIn) { value in
-            let label = "Publishing site \(Int(value * 100))%"
-            FileHandle.standardError.write(Data("\r\(label.padding(toLength: 32, withPad: " ", startingAt: 0))".utf8))
+        let site: PublishedSite
+        do {
+            site = try await api.publishSite(archiveURL: prepared.archiveURL, expiresIn: expiresIn, storage: storage) { value in
+                let label = "Publishing site \(Int(value * 100))%"
+                FileHandle.standardError.write(Data("\r\(label.padding(toLength: 32, withPad: " ", startingAt: 0))".utf8))
+            }
+        } catch let error as WirecopyError {
+            throw storageHint(for: error)
         }
         FileHandle.standardError.write(Data("\n".utf8))
         if options.has("--json") {
@@ -116,6 +125,21 @@ struct WirecopyCLI {
         }
     }
 
+    // Appends an actionable hint to the two BYOS destination failures so a
+    // scripted `--storage byos` publish explains how to recover. The exit code
+    // stays 69 (WirecopyError.api) because the failure is still an API error.
+    private static func storageHint(for error: WirecopyError) -> WirecopyError {
+        guard case let .api(code, message) = error else { return error }
+        switch code {
+        case "plan_required":
+            return .api(code: code, message: "\(message)\nHint: your bucket needs a Pro plan. Publish without --storage byos to use managed storage.")
+        case "byos_unavailable":
+            return .api(code: code, message: "\(message)\nHint: connect and verify a bucket in the web dashboard, or publish without --storage byos to use managed storage.")
+        default:
+            return error
+        }
+    }
+
     private static func exitCode(for error: Error) -> Int32 {
         switch error {
         case is CLIError: 64
@@ -132,7 +156,7 @@ struct WirecopyCLI {
       wirecopy configure --server http://localhost:3000 --token wc_live_… [--expires 86400]
       wirecopy publish <path> [more paths] [--expires seconds] [--format raw|markdown|html|json]
       wirecopy publish --clipboard [--json]
-      wirecopy site <index.html|site.zip|folder> [--expires seconds] [--json]
+      wirecopy site <index.html|site.zip|folder> [--storage managed|byos] [--expires seconds] [--json]
       wirecopy links [--json]
       wirecopy links revoke <id>
 
@@ -150,7 +174,7 @@ private struct Options {
         var index = 0
         while index < arguments.count {
             let argument = arguments[index]
-            if ["--server", "--token", "--expires", "--format"].contains(argument) { index += 2; continue }
+            if ["--server", "--token", "--expires", "--format", "--storage"].contains(argument) { index += 2; continue }
             if argument.hasPrefix("--") { index += 1; continue }
             result.append(argument)
             index += 1

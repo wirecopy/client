@@ -2,12 +2,66 @@ openapi: 3.1.0
 info:
   title: Wirecopy Managed API
   version: 1.0.0
-  description: Versioned contract used by the native app and standalone CLI.
+  description: |
+    Versioned contract used by the native app and standalone CLI.
+
+    Scope boundaries. The following are deliberately outside this contract:
+
+    - Device-token provisioning (mint, list, revoke) happens in the
+      authenticated web dashboard at `/device_tokens`. This API only consumes
+      device tokens; it never issues or manages them.
+    - `POST /auth/session` and `DELETE /auth/session` are web-session
+      authentication endpoints (the Clerk session exchange and sign-out),
+      not part of the versioned API surface. The native app does not call
+      them; it authenticates only with device tokens.
+    - Sites are write-only from this API today: `POST /api/v1/sites` and
+      `DELETE /api/v1/sites/{id}` exist, but there is no `GET /api/v1/sites`
+      listing. Site deletion is reachable via the API but is not implemented
+      in the shipped client.
+
+    Authentication. Every operation expects a device token
+    (`Authorization: Bearer wc_live_...`). The service also accepts an
+    authenticated web-session cookie on these routes (with CSRF protection
+    when no bearer token is present), but the device token is the only
+    scheme this contract supports. Requests without a valid principal
+    receive 401 with code `unauthorized`.
+
+    Errors. Failures use the ErrorEnvelope shape
+    (`{"error": {"code", "message"}}`). Failures rendered by the framework
+    before controller code runs (for example a missing top-level parameter
+    on the multipart site endpoint) can bypass the envelope. Known codes are
+    listed on the ErrorDetail schema.
+
+    Rate limits. Applied per client IP per minute at the application layer:
+    `POST /api/v1/upload_intents` allows 30 requests per minute and
+    `POST /api/v1/sites` allows 10 requests per minute; both answer 429 with
+    code `rate_limited` when exceeded. Upload quota exhaustion also answers
+    429, with codes `file_too_large`, `daily_limit`, or `storage_limit`.
+    No other operation in this contract is rate limited at the application
+    layer.
+
+    Site serving. Published sites are served on a dedicated artifact domain
+    (`wirecopy.site`), each on its own `s-<token>` subdomain fronted by a CDN
+    with serve-time SHA-256 verification and revoke/purge support; the `url`
+    field of a PublishedSite points at that host. Serving is enabled in
+    production at cutover via `SITE_PUBLISHING_ENABLED=true`. The flag gates the
+    public serving route and the web dashboard, not the API site endpoints, so
+    a site published while the flag is off is accepted but not yet served. Local
+    development serves the same sites over a `/p/:token` path route instead of a
+    subdomain. Sites may be published to Wirecopy-managed storage (the default)
+    or, on a Pro plan with a verified connection, to the caller's own bucket
+    (`storage=byos`); both destinations are served and verified through the same
+    artifact domain.
   license:
     name: Apache License 2.0
     identifier: Apache-2.0
 servers:
+  - url: https://wirecopy.app
+    description: Host currently served by the production proxy
+      (service/config/deploy.yml).
   - url: https://api.wirecopy.app
+    description: Planned API hostname (see client/docs/architecture.md). Not
+      yet configured in the deployed proxy.
 security:
   - deviceToken: []
 paths:
@@ -15,6 +69,12 @@ paths:
     post:
       summary: Create a direct file-upload intent
       operationId: createUploadIntent
+      description: |
+        Validates plan quota, records an intent in state `uploading`, and
+        returns a short-lived presigned `PUT` grant for uploading the bytes
+        directly to object storage. `expires_in` is in seconds and is
+        clamped to the plan's maximum retention. Rate limited to 30 requests
+        per minute per client IP.
       requestBody:
         required: true
         content:
@@ -26,13 +86,25 @@ paths:
                 upload: { $ref: '#/components/schemas/CreateUpload' }
       responses:
         '201':
-          description: Intent and direct-upload grant
+          description: Intent and direct-upload grant. This is the only
+            response in which the `upload` grant field is populated.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UploadIntent' }
-        '400': { $ref: '#/components/responses/Error' }
+        '400':
+          description: Malformed request (code `invalid_request`), including
+            missing `filename` or `byte_size`, or `mode` other than `file`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '401': { $ref: '#/components/responses/Error' }
-        '429': { $ref: '#/components/responses/Error' }
+        '429':
+          description: Either the per-IP rate limit (code `rate_limited`) or
+            a plan quota (codes `file_too_large`, `daily_limit`,
+            `storage_limit`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /api/v1/upload_intents/{id}:
     parameters:
       - $ref: '#/components/parameters/IntentID'
@@ -45,6 +117,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UploadIntent' }
+        '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
   /api/v1/upload_intents/{id}/complete:
     parameters:
@@ -52,19 +125,33 @@ paths:
     post:
       summary: Complete a direct file upload
       operationId: completeUploadIntent
-      description: Idempotently verifies an uploaded object and starts or observes quarantine scanning.
+      description: Idempotently verifies an uploaded object and starts or
+        observes quarantine scanning. Completing an intent that is already
+        `quarantined` or `available` returns its current state unchanged.
       responses:
         '200':
           description: Updated lifecycle state
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UploadIntent' }
+        '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
+        '422':
+          description: The upload cannot be completed. Codes are
+            `invalid_state` (not completable from the current state),
+            `size_mismatch` (stored byte count differs from the declared
+            size; the object is deleted and the intent is rejected), or
+            `object_missing` (no object was uploaded yet).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /api/v1/links:
     get:
       summary: List recent managed links
       operationId: listLinks
+      description: Returns the 100 most recent non-deleted links, newest
+        first. Revoked and expired links are included; inspect `revoked_at`
+        and `expires_at`. There is no pagination.
       responses:
         '200':
           description: Most recent managed links
@@ -82,6 +169,9 @@ paths:
     delete:
       summary: Revoke a managed link
       operationId: revokeLink
+      description: Soft revocation. Sets `revoked_at` on the link and moves
+        the backing upload intent to state `revoked`. The link still appears
+        in listings afterwards.
       parameters:
         - name: id
           in: path
@@ -89,12 +179,23 @@ paths:
           schema: { type: integer }
       responses:
         '204': { description: Link revoked }
+        '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
   /api/v1/sites:
     post:
       summary: Publish a static site
       operationId: publishSite
-      description: Publishes one HTML file or ZIP as an isolated static site. Mode must be explicit.
+      description: |
+        Publishes one HTML file or ZIP as an isolated static site. Mode must
+        be explicit. The archive filename must end in `.html`, `.htm`, or
+        `.zip`. ZIP contents are limited to 500 files, 25 MB per file, an
+        allowlist of static-asset extensions, and the plan's total publish
+        limit; the site must contain `index.html` at its root (a single
+        root folder is stripped automatically). `expires_in` is in seconds
+        and is clamped to the plan's maximum retention. Rate limited to 10
+        requests per minute per client IP. Folder uploads (`files`/`paths`)
+        are a web-dashboard feature, not part of this API. See the top-level
+        description for the `SITE_PUBLISHING_ENABLED` gating caveat.
       requestBody:
         required: true
         content:
@@ -110,19 +211,60 @@ paths:
                     mode: { type: string, const: site }
                     archive: { type: string, format: binary }
                     expires_in: { type: integer, minimum: 1 }
+                    storage:
+                      type: string
+                      enum: [managed, byos]
+                      default: managed
+                      description: |
+                        Publish destination. `managed` (the default when the
+                        field is omitted) writes to Wirecopy-managed storage.
+                        `byos` writes to the caller's own connected bucket and
+                        requires a Pro plan plus a verified storage connection
+                        (configured in the web dashboard); otherwise the
+                        publish is rejected with `plan_required` (403) or
+                        `byos_unavailable` (422). Older clients omit this field
+                        and always publish to managed storage.
       responses:
         '201':
           description: Activated static-site deployment
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PublishedSite' }
+        '400':
+          description: Bad request. A framework-rendered failure (for example a
+            missing top-level `site` parameter) may not use the error envelope;
+            an unknown `storage` destination is rejected with code
+            `invalid_request` and does use the envelope.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '401': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
-        '429': { $ref: '#/components/responses/Error' }
+        '403':
+          description: Publishing to your own bucket (`storage=byos`) requires a
+            Pro plan (code `plan_required`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          description: The input cannot be published. Codes are `invalid_site`
+            (wrong mode, disallowed file types, missing `index.html`, unsafe
+            paths, or size limits) or `byos_unavailable` (`storage=byos` with
+            no verified storage connection).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Per-IP rate limit exceeded (code `rate_limited`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /api/v1/sites/{id}:
     delete:
       summary: Delete a static site
       operationId: deleteSite
+      description: Hard deletion. Removes the site descriptor and all stored
+        objects, then marks the record deleted. Reachable via this API but
+        not implemented in the shipped client today.
       parameters:
         - name: id
           in: path
@@ -130,6 +272,7 @@ paths:
           schema: { type: integer }
       responses:
         '204': { description: Site and all managed assets deleted }
+        '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
@@ -137,12 +280,18 @@ components:
       type: http
       scheme: bearer
       bearerFormat: wc_live
+      description: Device token minted in the authenticated web dashboard at
+        `/device_tokens`. Plaintext is `wc_live_` followed by a URL-safe
+        base64 secret, shown once at creation; only a SHA-256 digest is
+        stored. Revocation takes effect immediately.
   parameters:
     IntentID:
       name: id
       in: path
       required: true
       schema: { type: string }
+      description: Public intent identifier (URL-safe base64), not a database
+        id.
   responses:
     Error:
       description: Structured API failure
@@ -152,22 +301,45 @@ components:
   schemas:
     CreateUpload:
       type: object
-      required: [filename, content_type, byte_size]
+      required: [filename, byte_size]
       properties:
         mode: { type: string, enum: [file], default: file }
-        filename: { type: string, minLength: 1 }
-        content_type: { type: string }
+        filename:
+          type: string
+          minLength: 1
+          description: Stripped server-side; a blank value is stored as
+            "untitled".
+        content_type:
+          type: string
+          description: Optional. Blank or missing values default to
+            application/octet-stream, which is echoed back and required as
+            the Content-Type header of the direct upload.
         byte_size: { type: integer, minimum: 1 }
-        expires_in: { type: integer, minimum: 1 }
+        expires_in:
+          type: integer
+          minimum: 1
+          description: Retention in seconds. Omitted values use the plan
+            default; all values are clamped to the plan's maximum retention.
     PublishedSite:
       type: object
-      required: [id, state, name, url, byte_size, file_count, expires_at]
+      required: [id, state, name, url, storage, byte_size, file_count, expires_at]
       properties:
         id: { type: integer }
         state: { type: string, enum: [published] }
         name: { type: string }
         url: { type: string, format: uri }
-        byte_size: { type: integer, minimum: 1 }
+        storage:
+          type: string
+          enum: [managed, byos]
+          description: Destination the site was published to. `managed` is
+            Wirecopy-managed storage; `byos` is the caller's own connected
+            bucket, served and verified through the same artifact domain.
+            Older clients that predate governed BYOS ignore this field.
+        byte_size:
+          type: integer
+          minimum: 0
+          description: Total published bytes. Can be 0 (a site whose only
+            file is an empty index.html).
         file_count: { type: integer, minimum: 1 }
         expires_at: { type: string, format: date-time }
     UploadIntent:
@@ -183,6 +355,9 @@ components:
         byte_size: { type: integer }
         expires_at: { type: string, format: date-time }
         error:
+          description: Populated when scanning or verification failed. Known
+            codes here are `size_mismatch`, `malware_detected`, and
+            `scan_failed`.
           oneOf:
             - { $ref: '#/components/schemas/ErrorDetail' }
             - { type: 'null' }
@@ -191,6 +366,8 @@ components:
             - { $ref: '#/components/schemas/UploadLink' }
             - { type: 'null' }
         upload:
+          description: Present only in the createUploadIntent response; the
+            key is absent from all other representations of an intent.
           oneOf:
             - { $ref: '#/components/schemas/UploadGrant' }
             - { type: 'null' }
@@ -232,5 +409,31 @@ components:
       type: object
       required: [code, message]
       properties:
-        code: { type: string }
+        code:
+          type: string
+          description: |
+            Stable machine-readable identifier. Deliberately not an enum:
+            codes originate in several service layers and new codes may be
+            added without a contract revision, so clients must tolerate
+            unknown values. Known codes emitted today:
+
+            - `unauthorized` (401) — missing or invalid credentials.
+            - `not_found` (404) — the resource does not exist or is not
+              yours.
+            - `rate_limited` (429) — per-IP request limit exceeded.
+            - `invalid_request` (400) — malformed upload-intent request, or an
+              unknown `storage` destination on a site publish.
+            - `file_too_large`, `daily_limit`, `storage_limit` (429) — plan
+              quota exceeded when creating an upload intent.
+            - `invalid_state`, `size_mismatch`, `object_missing` (422) —
+              upload completion failures.
+            - `invalid_site` (422) — the input cannot be published as a
+              static site.
+            - `plan_required` (403) — publishing with `storage=byos` on a
+              non-Pro plan.
+            - `byos_unavailable` (422) — publishing with `storage=byos` with
+              no verified storage connection.
+
+            Inside an UploadIntent's embedded `error` object the known codes
+            are `size_mismatch`, `malware_detected`, and `scan_failed`.
         message: { type: string }

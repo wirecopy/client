@@ -7,7 +7,7 @@ public protocol ManagedAPI: Sendable {
     func intent(id: String) async throws -> UploadIntent
     func links() async throws -> [ManagedLink]
     func revoke(linkID: Int) async throws
-    func publishSite(archiveURL: URL, expiresIn: Int, progress: @escaping @Sendable (Double) -> Void) async throws -> PublishedSite
+    func publishSite(archiveURL: URL, expiresIn: Int, storage: String?, progress: @escaping @Sendable (Double) -> Void) async throws -> PublishedSite
 }
 
 public final class ManagedAPIClient: ManagedAPI, @unchecked Sendable {
@@ -77,9 +77,9 @@ public final class ManagedAPIClient: ManagedAPI, @unchecked Sendable {
         let _: EmptyResponse = try await request(path: "/api/v1/links/\(linkID)", method: "DELETE")
     }
 
-    public func publishSite(archiveURL: URL, expiresIn: Int, progress: @escaping @Sendable (Double) -> Void) async throws -> PublishedSite {
+    public func publishSite(archiveURL: URL, expiresIn: Int, storage: String? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> PublishedSite {
         let boundary = "wirecopy-\(UUID().uuidString)"
-        let multipartURL = try MultipartFile.build(archiveURL: archiveURL, expiresIn: expiresIn, boundary: boundary)
+        let multipartURL = try MultipartFile.build(archiveURL: archiveURL, expiresIn: expiresIn, storage: storage, boundary: boundary)
         defer { try? FileManager.default.removeItem(at: multipartURL) }
 
         guard let url = URL(string: "/api/v1/sites", relativeTo: baseURL) else { throw WirecopyError.invalidServerResponse }
@@ -127,8 +127,8 @@ public final class ManagedAPIClient: ManagedAPI, @unchecked Sendable {
     }
 }
 
-private enum MultipartFile {
-    static func build(archiveURL: URL, expiresIn: Int, boundary: String) throws -> URL {
+enum MultipartFile {
+    static func build(archiveURL: URL, expiresIn: Int, storage: String? = nil, boundary: String) throws -> URL {
         let outputURL = FileManager.default.temporaryDirectory.appending(path: "wirecopy-site-request-\(UUID().uuidString)")
         FileManager.default.createFile(atPath: outputURL.path, contents: nil)
         let output = try FileHandle(forWritingTo: outputURL)
@@ -136,6 +136,9 @@ private enum MultipartFile {
 
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"site[mode]\"\r\n\r\nsite\r\n", to: output)
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"site[expires_in]\"\r\n\r\n\(expiresIn)\r\n", to: output)
+        if let storage {
+            try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"site[storage]\"\r\n\r\n\(storage)\r\n", to: output)
+        }
 
         let filename = archiveURL.lastPathComponent.replacingOccurrences(of: "\"", with: "_")
         let contentType = archiveURL.pathExtension.lowercased() == "zip" ? "application/zip" : "text/html"

@@ -4,8 +4,11 @@
 > [decision 0003](docs/decisions/0003-wirecopy-product-name.md). Public launch
 > remains gated on domain registration, trademark review and a signed release.
 
-Wirecopy is a product research repository for a developer-focused
-macOS utility that turns copied images and files into controlled share links.
+Wirecopy is a developer-focused macOS utility that turns copied images and
+files into controlled share links. This repository holds both the product
+research corpus and the implemented client: a native menu-bar app and
+standalone CLI, backed by a managed Rails service in a sibling repository that
+is in controlled production bring-up. The product is not launched.
 
 The intended default workflow is deliberately small:
 
@@ -65,16 +68,21 @@ versioned boundary is [`contracts/managed-api-v1.yaml`](contracts/managed-api-v1
 See the [macOS development guide](macos/README.md) for building, configuring,
 testing and installing the native app locally.
 
-## Static-site publishing tracer
+## Static-site publishing
 
-The managed-service tracer now accepts one HTML file, ZIP, or folder with a
-root `index.html`, publish it, and receive a URL where the site is immediately
-live. Start with managed R2 storage and controlled routing because one known
-cloud environment makes domains, atomic activation, cache behavior and deletion
-testable. Then evaluate BYOS storage with either Wirecopy-managed routing or a
-fully user-owned website endpoint.
+Wirecopy publishes one HTML file, a ZIP, or a folder with a root `index.html`
+and returns a URL where the site is immediately live. Serving is governed on a
+separate artifact domain (`wirecopy.site`): Rails behind a Cloudflare zone and a
+Caddy accessory verifies every object's SHA-256 at serve time, and revocation,
+expiry and takedown run through a single retire path with a batched CDN purge.
+Pro accounts can publish into their own S3-compatible bucket ("governed BYOS")
+and Wirecopy still serves, verifies and revokes those sites through the same
+edge.
 
-This remains a gated product surface, not a launch promise. Serving HTML means
-hosting active JavaScript, so it requires a dedicated cookie-isolated site
-domain, per-site origin isolation, atomic folder deployments and stronger abuse
-controls. See [Static-site publishing exploration](docs/static-site-publishing.md).
+This is a gated product surface, not yet a launch promise: the production
+feature gate stays off until the operator flips it at cutover. Serving HTML
+means hosting active JavaScript, which is why it lives on a dedicated
+cookie-isolated domain with per-site origin isolation, atomic folder
+deployments and public-content abuse controls. See [decision
+0014](docs/decisions/0014-governed-byos-site-delivery.md) and the [static-site
+publishing exploration](docs/static-site-publishing.md).

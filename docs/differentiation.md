@@ -35,7 +35,9 @@ destinations even though the product only publishes a link.
 
 ### 3. Control without ceremony
 
-Named policy presets make security understandable:
+Named policy presets are a planned concept, not shipped behavior; the
+implemented app and CLI currently expose a single default expiry
+(`--expires`). The intent is that presets make security understandable:
 
 - **Quick:** short retention, direct URL, no prompt;
 - **Work:** longer retention and account history;
@@ -49,8 +51,8 @@ upload.
 ### 4. Hosted convenience without lock-in
 
 Managed cloud works immediately. S3-compatible bring-your-own storage uses the
-same interaction and can be selected globally or by preset. Exportable history
-and predictable object keys reduce lock-in.
+same interaction and would be selected globally or, once presets exist, per
+preset. Exportable history and predictable object keys reduce lock-in.
 
 ### 5. A real developer surface
 

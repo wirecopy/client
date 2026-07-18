@@ -82,6 +82,7 @@ During development, use the wrapper:
 ./bin/wirecopy publish one.png two.pdf --format markdown
 ./bin/wirecopy publish --clipboard --json
 ./bin/wirecopy site ./dist
+./bin/wirecopy site ./dist --storage byos
 ./bin/wirecopy site ./prototype.zip --json
 ./bin/wirecopy links
 ./bin/wirecopy links revoke 123
@@ -94,6 +95,34 @@ goes to stderr; the link or JSON result goes to stdout.
 `wirecopy site` accepts one `.html`, `.htm`, `.zip`, or folder. Folder paths are
 preserved in a deterministic ZIP and the managed API receives an explicit
 `mode=site`; ordinary `wirecopy publish index.html` remains a file link.
+
+`--storage` chooses the publish destination: `managed` (the default; the flag
+may be omitted) writes to Wirecopy-managed storage, while `byos` writes to your
+own connected bucket and requires a Pro plan with a verified storage connection
+set up in the web dashboard. Any other value is a usage error (exit `64`). A
+`byos` publish that is refused for lack of a plan or connection surfaces as an
+API error (exit `69`) with a hint on how to recover. Omitting the flag keeps the
+request compatible with servers that predate BYOS.
+
+## Exit codes
+
+The CLI exits `0` on success. Failures map to a small set of codes, aligned
+with BSD `sysexits.h` where a match exists:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success. |
+| `64` | Usage error: unknown command, or missing or invalid arguments (including a `--storage` value other than `managed` or `byos`). |
+| `69` | The managed API returned an error response, including a refused `--storage byos` publish (`plan_required` or `byos_unavailable`). |
+| `78` | Missing configuration: no device token from `configure` or the environment (the server URL falls back to a built-in default; an unparseable stored server URL also triggers this). |
+| `1` | Any other failure, including unreadable input files, invalid site folders, rejected object uploads and network errors. |
+
+Running `wirecopy` with no command, or `wirecopy help`, prints usage and exits
+`0`. These values come from `exitCode(for:)` in
+`Sources/WirecopyCLI/main.swift`.
+Scripts should branch on these documented codes rather than on stderr text;
+changes to them will be recorded before integrations are asked to rely on new
+values.
 
 ## Tests and real-service verification
 

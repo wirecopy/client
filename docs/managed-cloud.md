@@ -44,6 +44,38 @@ revoke/delete action and the loss of access for a URL that was already resolved.
 Only verified PNG, JPEG, GIF and WebP assets render inline initially. Other
 accepted file types are served as downloads with safe content headers.
 
+## Governed site publishing
+
+Static-site publishing is a distinct managed surface from file links, governed
+on a **separate registrable artifact domain** (`wirecopy.site`, never
+`wirecopy.app`) so user-authored JavaScript never runs on a Wirecopy-cookie
+origin. Cloudflare terminates the artifact domain's TLS and caches responses; a
+Cloudflare Origin Rule rewrites the public 443 to origin 8443; a dedicated Caddy
+accessory presents a Cloudflare Origin CA wildcard certificate and
+reverse-proxies to Rails. Rails maps each `s-<token>.wirecopy.site` subdomain to
+one published site, reads the Postgres-authoritative manifest, and streams each
+object only after verifying its SHA-256 and byte size against that manifest —
+small objects are verified in full before any byte is sent, larger ones stream
+and truncate on mismatch. Revocation, expiry, takedown and account deletion all
+run through one retire path that deletes the object tree and enqueues a batched,
+rate-aware Cloudflare cache purge; the CDN entry TTL bounds how long a revoked
+page can still be served.
+
+Pro accounts can publish into **their own S3-compatible bucket** ("governed
+BYOS") instead of managed R2. The user connects one bucket in the web
+dashboard; Wirecopy verifies it with a write / read-back / delete probe, stores
+its credentials with non-deterministic Active Record encryption, and thereafter
+serves, verifies, revokes and purges those sites through the same
+artifact-domain edge. Destination is explicit per publish (managed by default).
+BYOS bytes are not counted against managed storage quota, but per-publish size
+and file-count limits still apply. This is Pro-only and operator-granted until
+billing ships.
+
+Site publishing is implemented but the production feature gate
+(`SITE_PUBLISHING_ENABLED`) stays off in `config/deploy.yml` until the operator
+flips it at cutover. See [decision
+0014](decisions/0014-governed-byos-site-delivery.md).
+
 ## Lifecycle states
 
 ```text
@@ -95,6 +127,12 @@ or credentials as product telemetry. Optional client diagnostics are separately
 opted in through settings, retain only minimal failure and performance events
 for 30 days, and never turn local/BYOS history into managed analytics.
 
+One carve-out: a published site's manifest necessarily stores each asset's
+relative path, byte size and content hash, because serving verifies bytes
+against it before delivery. That is functional serving metadata for content the
+user chose to make public, not product telemetry, and it is not turned into
+analytics.
+
 ## Account deletion
 
 Account deletion immediately:
@@ -102,6 +140,9 @@ Account deletion immediately:
 - revokes every Rails device token and controlled link;
 - rejects new intents and cancels incomplete uploads/scans;
 - ends the managed entitlement and starts provider cleanup;
+- retires every published site — managed and BYOS — deleting its object tree
+  (from the customer bucket for BYOS) and enqueuing a CDN cache purge before
+  the account records are destroyed;
 - schedules active and quarantined objects for purge within 24 hours.
 
 Rails account data and customer-visible analytics are deleted or irreversibly

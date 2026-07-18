@@ -214,10 +214,11 @@ the primary geography.
 
 The executable is `wirecopy`. Human progress is written to standard error and
 pipeable output to standard output. JSON response fields and exit codes are
-versioned before integrations depend on them.
+versioned before integrations depend on them; the current values are
+documented in [`macos/README.md`](../macos/README.md).
 
 ```bash
-wirecopy publish ./diagram.png --preset quick --format markdown
+wirecopy publish ./diagram.png --expires 86400 --format markdown
 wirecopy publish --clipboard --json
 wirecopy site ./dist --json
 wirecopy links revoke <id>

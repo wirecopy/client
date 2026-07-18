@@ -3,7 +3,7 @@
 ## Default interaction
 
 1. The user copies an image or one or more files.
-2. The user presses a configurable global shortcut.
+2. The user presses the global shortcut, `Control–Option–C`.
 3. The app validates the input before starting an upload.
 4. A compact progress notification shows the file name and destination.
 5. The app replaces the clipboard with the configured output.
@@ -19,21 +19,28 @@ All entry points should call the same publishing service.
 
 | Entry point | Intended behavior |
 | --- | --- |
-| Global shortcut | Publish the best supported clipboard representation using the active preset. |
+| Global shortcut | Publish the best supported clipboard representation using the configured default expiry. |
 | Menu bar | Show status, recent links, destination and manual actions. |
 | Finder Quick Action | Publish selected files or folders without first copying them. |
 | Share extension | Accept items from applications that expose the macOS Share menu. |
 | Drag to menu bar | Publish dropped files with visible feedback. |
 | CLI | Publish paths or standard input and emit text or JSON. |
-| Shortcuts action | Expose input, preset, output format and result fields. |
+| Shortcuts action | Expose input, expiry, output format and result fields. |
 
 Raycast, Alfred, Herdr and editor integrations should consume the CLI or a
 versioned local interface rather than duplicate upload logic.
 
-## Shortcut setup
+## Global shortcut
 
-First-run setup suggests `Control–Option–C` and asks the user to confirm or
-replace it. The recorder validates before continuing that:
+The implemented app registers one fixed global shortcut, `Control–Option–C`,
+at launch through the Carbon hotkey API. There is no recorder, no first-run
+confirmation step and no settings control for changing it. Registration
+success or failure is logged; a failed registration currently leaves the
+shortcut unavailable without a dedicated error surface.
+
+A configurable shortcut remains a planned enhancement. When it is built,
+first-run setup should suggest `Control–Option–C` and ask the user to confirm
+or replace it, and the recorder should validate before continuing that:
 
 - the sequence is syntactically valid;
 - it is not already assigned inside the app;
@@ -166,11 +173,12 @@ reset and diagnostic-log instructions.
 
 ## Management surfaces
 
-The native app owns recent links, available link actions, presets,
-destinations, quota summary and local history. Managed history synchronizes
-through Rails; BYOS history remains local. The Rails web application owns full
-account history, aggregate link analytics, billing, account deletion and abuse
-reporting.
+The native app owns recent links, available link actions, connection settings,
+the default expiry and local history. Policy presets, multiple destinations
+and a quota summary are planned additions to this surface, not shipped
+behavior. Managed history synchronizes through Rails; BYOS history remains
+local. The Rails web application owns full account history, aggregate link
+analytics, billing, account deletion and abuse reporting.
 
 Operational analytics in the native app are not a license for behavioral
 telemetry. Optional diagnostics follow the explicit opt-in and data exclusions

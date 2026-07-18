@@ -71,12 +71,13 @@ public struct PublishedSite: Codable, Identifiable, Hashable, Sendable {
     public let state: String
     public let name: String
     public let url: URL
+    public let storage: String?
     public let byteSize: Int64
     public let fileCount: Int
     public let expiresAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, state, name, url
+        case id, state, name, url, storage
         case byteSize = "byte_size"
         case fileCount = "file_count"
         case expiresAt = "expires_at"
