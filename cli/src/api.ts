@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { appendFile, mkdtemp, open, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 
 import { isLoopback } from "./config.js";
 import { ApiError } from "./errors.js";
@@ -75,14 +75,18 @@ export class WirecopyApi {
     });
   }
 
-  async upload(input: PreparedInput, grant: UploadGrant): Promise<void> {
+  async upload(
+    input: PreparedInput,
+    grant: UploadGrant,
+    onProgress: (sent: number, total: number) => void = () => {},
+  ): Promise<void> {
     validateUploadGrant(grant);
     const response = await networkRequest(
       grant.url,
       {
         method: grant.method,
         headers: grant.headers,
-        body: Readable.toWeb(createReadStream(input.path)),
+        body: meteredStream(input.path, input.byteSize, onProgress),
         duplex: "half",
         redirect: "error",
         signal: AbortSignal.timeout(10 * 60 * 1000),
@@ -122,6 +126,7 @@ export class WirecopyApi {
     input: PreparedInput,
     expiresIn: number,
     storage?: "managed" | "byos",
+    onProgress: (sent: number, total: number) => void = () => {},
   ): Promise<PublishedSite> {
     const boundary = `wirecopy-${crypto.randomUUID()}`;
     const temporaryDirectory = await mkdtemp(join(tmpdir(), "wirecopy-request-"));
@@ -152,7 +157,7 @@ export class WirecopyApi {
           "Content-Type": `multipart/form-data; boundary=${boundary}`,
           "Content-Length": String(size),
         },
-        body: Readable.toWeb(createReadStream(bodyPath)),
+        body: meteredStream(bodyPath, size, onProgress),
         duplex: "half",
       } as StreamRequestInit);
     } finally {
@@ -196,6 +201,22 @@ export class WirecopyApi {
       throw new ApiError("invalid_response", "The Wirecopy service returned an invalid response.");
     }
   }
+}
+
+function meteredStream(
+  path: string,
+  total: number,
+  onProgress: (sent: number, total: number) => void,
+): ReadableStream {
+  let sent = 0;
+  const meter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      sent += chunk.length;
+      onProgress(sent, total);
+      callback(null, chunk);
+    },
+  });
+  return Readable.toWeb(createReadStream(path).pipe(meter)) as ReadableStream;
 }
 
 export async function waitForAvailable(

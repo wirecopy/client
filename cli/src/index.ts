@@ -4,6 +4,7 @@ import { clearConfig, loadConfig, parsePositiveInteger, saveConfig } from "./con
 import { ApiError, UsageError, errorMessage, exitCodeFor } from "./errors.js";
 import { prepareFiles, prepareSite } from "./input.js";
 import { WirecopyApi, waitForAvailable, type ManagedLink } from "./api.js";
+import { TerminalProgress } from "./progress.js";
 
 const USAGE = `Wirecopy - publish files and working web artifacts
 
@@ -93,18 +94,19 @@ async function publish(arguments_: string[]): Promise<void> {
   }
 
   const input = await prepareFiles(options.positionals);
+  const activity = new TerminalProgress();
   try {
     const api = new WirecopyApi(config.server, config.token);
-    progress("Authorizing");
+    activity.update("Authorizing");
     const created = await api.createIntent(input, expiresIn);
     if (!created.upload) {
       throw new ApiError("invalid_response", "The Wirecopy service did not return an upload grant.");
     }
-    progress("Uploading");
-    await api.upload(input, created.upload);
-    progress("Safety check");
+    activity.update("Uploading", 0, input.byteSize);
+    await api.upload(input, created.upload, (sent, total) => activity.update("Uploading", sent, total));
+    activity.update("Safety check");
     const intent = await waitForAvailable(api, await api.completeIntent(created.id));
-    clearProgress();
+    activity.done("Link ready");
     const link = {
       url: intent.link!.url,
       filename: input.filename,
@@ -113,6 +115,7 @@ async function publish(arguments_: string[]): Promise<void> {
     };
     console.log(formatLink(link, format));
   } finally {
+    activity.clear();
     await input.cleanup();
   }
 }
@@ -130,20 +133,28 @@ async function publishSite(arguments_: string[]): Promise<void> {
   const expiresIn = options.values.has("--expires")
     ? positiveInteger(options.values.get("--expires")!, "--expires")
     : config.expiresIn;
-  const input = await prepareSite(options.positionals[0]!);
+  const activity = new TerminalProgress();
+  let input: Awaited<ReturnType<typeof prepareSite>> | undefined;
   try {
-    progress("Publishing site");
+    activity.update("Preparing site");
+    input = await prepareSite(options.positionals[0]!);
+    if (input.notice) {
+      activity.update(input.notice);
+    }
+    activity.update("Uploading site", 0, input.byteSize);
     const site = await new WirecopyApi(config.server, config.token).publishSite(
       input,
       expiresIn,
       storage as "managed" | "byos" | undefined,
+      (sent, total) => activity.update("Uploading site", sent, total),
     );
-    clearProgress();
+    activity.done("Site published");
     console.log(options.flags.has("--json") ? JSON.stringify(site) : site.url);
   } catch (error) {
     throw storageHint(error);
   } finally {
-    await input.cleanup();
+    activity.clear();
+    await input?.cleanup();
   }
 }
 
@@ -237,20 +248,6 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function progress(message: string): void {
-  if (process.stderr.isTTY) {
-    process.stderr.write(`\r${message.padEnd(24)}`);
-  } else {
-    process.stderr.write(`${message}\n`);
-  }
-}
-
-function clearProgress(): void {
-  if (process.stderr.isTTY) {
-    process.stderr.write("\r                        \r");
-  }
-}
-
 function storageHint(error: unknown): unknown {
   if (!(error instanceof ApiError)) {
     return error;
@@ -317,7 +314,6 @@ async function readSecret(): Promise<string | undefined> {
 }
 
 main(process.argv.slice(2)).catch((error: unknown) => {
-  clearProgress();
   process.stderr.write(`wirecopy: ${errorMessage(error)}\n`);
   if (error instanceof UsageError) {
     process.stderr.write("Run 'wirecopy --help' for usage.\n");

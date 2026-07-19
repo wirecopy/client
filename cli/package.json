@@ -1,6 +1,6 @@
 {
   "name": "wirecopy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Publish files and static sites to Wirecopy from terminals, agents, and CI.",
   "license": "Apache-2.0",
   "type": "module",
