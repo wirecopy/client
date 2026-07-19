@@ -47,6 +47,7 @@ test("publishes a file through a direct upload grant", async (context) => {
   const file = join(directory, "report.txt");
   await writeFile(file, "actual artifact");
   let uploaded = "";
+  let uploadHeaders;
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
@@ -65,6 +66,7 @@ test("publishes a file through a direct upload grant", async (context) => {
         },
       });
     } else if (url.pathname === "/object" && request.method === "PUT") {
+      uploadHeaders = request.headers;
       uploaded = await body(request);
       response.writeHead(200).end();
     } else if (url.pathname === "/api/v1/upload_intents/intent-1/complete") {
@@ -91,6 +93,8 @@ test("publishes a file through a direct upload grant", async (context) => {
   assert.equal(result.code, 0, result.stderr);
   assert.equal(result.stdout.trim(), "https://wirecopy.test/d/result");
   assert.equal(uploaded, "actual artifact");
+  assert.equal(uploadHeaders["content-length"], "15");
+  assert.equal(uploadHeaders["transfer-encoding"], undefined);
 });
 
 test("packages and publishes a site folder", async (context) => {

@@ -81,11 +81,13 @@ export class WirecopyApi {
     onProgress: (sent: number, total: number) => void = () => {},
   ): Promise<void> {
     validateUploadGrant(grant);
+    const headers = new Headers(grant.headers);
+    headers.set("Content-Length", String(input.byteSize));
     const response = await networkRequest(
       grant.url,
       {
         method: grant.method,
-        headers: grant.headers,
+        headers,
         body: meteredStream(input.path, input.byteSize, onProgress),
         duplex: "half",
         redirect: "error",
