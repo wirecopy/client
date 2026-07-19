@@ -1,7 +1,7 @@
 # Wirecopy for macOS
 
-Native macOS 14+ menu-bar app and standalone CLI, implemented in Swift 6 and
-SwiftUI. Both use `WirecopyCore` for clipboard/file preparation, deterministic
+Native macOS 14+ menu-bar app implemented in Swift 6 and SwiftUI. It uses
+`WirecopyCore` for clipboard/file preparation, deterministic
 multi-file ZIPs, managed upload intents, direct object uploads, lifecycle
 polling, formatting and local history.
 
@@ -72,9 +72,11 @@ checks of typography, spacing, adaptive colors and control states. The menu
 preview uses deterministic sample history, including a long filename and
 minute-granularity timestamps, without touching the user's real history.
 
-## CLI
+## Swift CLI parity harness
 
-During development, use the wrapper:
+The Swift CLI remains available during development as a contract and parity
+harness. Public CLI distribution uses the cross-platform npm package under
+`../cli/`; the Homebrew Cask does not install this Swift executable.
 
 ```sh
 ./bin/wirecopy configure --server http://localhost:3000 --token 'wc_live_…'
@@ -143,9 +145,8 @@ MinIO, downloads and compares the exact bytes, revokes the link, verifies HTTP
 open ~/Applications/Wirecopy.app
 ```
 
-This creates a release build, bundles the CLI at
-`Wirecopy.app/Contents/MacOS/wirecopy`, generates an `.icns`, applies an ad-hoc
-local signature and installs it under `~/Applications`. It is not notarized and
+This creates a release build, generates an `.icns`, applies an ad-hoc local
+signature and installs the app under `~/Applications`. It is not notarized and
 is not a distributable release.
 
 Artifacts are written under `dist/`. Generate a local Cask definition with:

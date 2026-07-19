@@ -54,7 +54,7 @@ Keep `README.md` concise. Put detailed material in the focused documents under
 
 - Prefer a native Swift and SwiftUI application with AppKit where macOS APIs
   require it.
-- Keep the Apache-2.0 Mac app, standalone CLI, shared Swift model, BYOS adapters
+- Keep the Apache-2.0 Mac app, npm CLI, shared publishing model, BYOS adapters
   and managed OpenAPI contract in the public client repository. Keep the Rails
   managed-service implementation and operations in a private repository.
 - Pin the private service to an exact public contract tag or commit and verify
@@ -78,8 +78,8 @@ Keep `README.md` concise. Put detailed material in the focused documents under
 - Production uses private Cloudflare R2 object storage and an initial Kamal
   deployment on Hetzner. Missing production database, storage or scanner
   configuration must fail closed.
-- Bundle the standalone `wirecopy` CLI in the signed application Homebrew Cask;
-  do not introduce a separate formula until independent installation is needed.
+- Distribute the canonical `wirecopy` CLI through npm. The Homebrew Cask owns
+  only the native application and must not install a competing CLI executable.
 - Keep `./scripts/verify` non-interactive in both repositories. It must create
   disposable test environments, reject production targets, emit machine-readable
   evidence and cover the scenario matrix in `docs/testing-harness.md`.

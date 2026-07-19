@@ -4,11 +4,10 @@
 > [decision 0003](docs/decisions/0003-wirecopy-product-name.md). Public launch
 > remains gated on domain registration, trademark review and a signed release.
 
-Wirecopy is a developer-focused macOS utility that turns copied images and
-files into controlled share links. This repository holds both the product
-research corpus and the implemented client: a native menu-bar app and
-standalone CLI, backed by a managed Rails service in a sibling repository that
-is in controlled production bring-up. The product is not launched.
+Wirecopy is a developer-focused publishing utility that turns local files and
+working web artifacts into controlled links. This repository holds the native
+macOS menu-bar app and the cross-platform npm CLI, backed by a managed Rails
+service in a sibling repository.
 
 The intended default workflow is deliberately small:
 
@@ -54,19 +53,39 @@ and more programmable than established Mac sharing tools.
 | [Business model](docs/business-model.md) | Captures pricing hypotheses and sustainable usage metrics. |
 | [Validation plan](docs/validation-plan.md) | Defines tests that must pass before building the full SaaS. |
 | [Automated testing harness](docs/testing-harness.md) | Defines non-interactive environments, simulators and release evidence. |
+| [npm CLI release](docs/npm-cli-release.md) | Defines package, security, remote-service and rollback gates. |
 | [Static-site publishing](docs/static-site-publishing.md) | Explores instant HTML/folder publishing through managed R2 and BYOS. |
 | [Research sources](docs/research-sources.md) | Records primary sources and time-sensitive observations. |
 | [Decisions](docs/decisions/README.md) | Preserves accepted product and architecture decisions. |
 
 ## Status
 
-The native Swift menu-bar application and standalone CLI are implemented under
-[`macos/`](macos/). The Rails managed service is implemented in the sibling
-`service/` repository. Local integration uses PostgreSQL and MinIO, and the
-versioned boundary is [`contracts/managed-api-v1.yaml`](contracts/managed-api-v1.yaml).
+The native Swift menu-bar application is under [`macos/`](macos/), and the
+cross-platform CLI is under [`cli/`](cli/). The Rails managed service is in the
+sibling `service/` repository. Their versioned boundary is
+[`contracts/managed-api-v1.yaml`](contracts/managed-api-v1.yaml).
 
 See the [macOS development guide](macos/README.md) for building, configuring,
 testing and installing the native app locally.
+
+## CLI
+
+Run the CLI without installing it:
+
+```bash
+npx wirecopy site ./dist
+npx wirecopy publish ./report.pdf
+```
+
+Or install the command globally:
+
+```bash
+npm install --global wirecopy
+wirecopy configure
+```
+
+The npm package is the canonical CLI distribution for macOS, Linux, Windows,
+containers and CI. See the [CLI guide](cli/README.md).
 
 ## Static-site publishing
 

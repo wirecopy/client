@@ -8,7 +8,6 @@ cask "wirecopy" do
   homepage "https://wirecopy.app"
 
   app "Wirecopy.app"
-  binary "Wirecopy.app/Contents/MacOS/wirecopy"
 
   zap trash: [
     "~/Library/Preferences/app.wirecopy.mac.plist"

@@ -124,7 +124,8 @@ real account login to verify core screens.
 - restored state does not reactivate revoked, expired or deleted links/tokens;
 - account deletion and object reconciliation survive injected provider failures;
 - Kamal configuration renders with required secrets and health checks;
-- Homebrew Cask install, CLI exposure, upgrade and uninstall on clean macOS CI.
+- Homebrew Cask install, upgrade and uninstall on clean macOS CI.
+- npm CLI install and `npx` execution on macOS, Linux and Windows CI.
 
 ### Static-site exploration
 
@@ -175,7 +176,7 @@ A release is blocked unless:
   resolution and revocation/deletion;
 - security, log-redaction and account-deletion assertions pass;
 - the restore report meets the documented RPO/RTO;
-- the signed/notarized Cask and bundled CLI pass clean-machine tests.
+- the signed/notarized Cask and npm CLI pass their clean-machine tests.
 
 Flaky tests are failures to fix, not tests to retry until green. The harness may
 rerun a failed scenario only to collect diagnostics and must preserve the first

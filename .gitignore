@@ -2,3 +2,6 @@
 macos/.build/
 macos/dist/
 macos/bin/wirecopy-release
+cli/dist/
+cli/node_modules/
+cli/*.tgz

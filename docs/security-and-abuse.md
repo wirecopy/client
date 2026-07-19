@@ -26,10 +26,13 @@ retention and failure behavior.
 
 ## Client requirements
 
-- Store S3 credentials and Rails device tokens in Keychain.
+- Store native-app S3 credentials and Rails device tokens in Keychain. The npm
+  CLI stores only a device token in a user-only configuration file and accepts
+  `WIRECOPY_TOKEN` for ephemeral CI runners.
 - Never log secrets, raw authorization headers, bearer links, object keys or
   signed URL query strings.
-- Validate custom endpoint schemes and explain certificate failures.
+- Refuse plaintext remote endpoints, cross-origin redirects and insecure upload
+  grants. Permit HTTP only for loopback development.
 - Bound temporary disk use and remove prepared files after completion/failure.
 - Detect source-file changes during upload when practical.
 - Require explicit consent for Accessibility-driven auto-insert.

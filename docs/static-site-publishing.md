@@ -28,7 +28,7 @@ site updates need atomic deployment rather than one-object link delivery.
 
 The mode is always explicit. An uploaded `.html` remains an ordinary file link
 unless the request selects `site`; extension-based auto-preview is prohibited.
-The bundled CLI exposes that choice as `wirecopy site <html|zip|folder>` and
+The npm CLI exposes that choice as `wirecopy site <html|zip|folder>` and
 packages folders without changing the menu-bar shortcut's file-link behavior.
 
 ## Recommended exploration order

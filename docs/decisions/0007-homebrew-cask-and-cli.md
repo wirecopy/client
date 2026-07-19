@@ -1,6 +1,6 @@
 # 0007: Distribute the app and CLI in one Homebrew Cask
 
-- Status: Accepted for implementation
+- Status: Superseded by decision 0015
 - Date: 2026-07-16
 
 ## Context

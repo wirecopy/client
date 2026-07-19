@@ -153,10 +153,16 @@ application is eligible for the official Cask repository:
 brew install --cask <owner>/<tap>/wirecopy
 ```
 
-The release archive contains the application bundle and a standalone
-`wirecopy` CLI built from shared Swift packages. The Cask exposes that bundled
-executable. No separate formula is planned initially; revisit it only if
-independent CLI installation demonstrates clear demand.
+The release archive contains only the application bundle. The canonical
+cross-platform `wirecopy` CLI is distributed separately through npm:
+
+```bash
+npx wirecopy site ./dist
+npm install --global wirecopy
+```
+
+Keeping the installers separate prevents Homebrew and npm from competing to
+own the same executable.
 
 The official Cask installs the project's signed and notarized build of the
 open-source client. Installing through Homebrew should not require users to

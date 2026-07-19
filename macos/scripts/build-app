@@ -14,7 +14,6 @@ swift build --package-path "$ROOT" -c release --triple x86_64-apple-macosx14.0
 rm -rf "$APP"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 lipo -create "$ARM_DIR/WirecopyApp" "$INTEL_DIR/WirecopyApp" -output "$CONTENTS/MacOS/WirecopyApp"
-lipo -create "$ARM_DIR/WirecopyCLI" "$INTEL_DIR/WirecopyCLI" -output "$CONTENTS/MacOS/wirecopy"
 ditto "$ARM_DIR/Wirecopy_WirecopyMac.bundle" "$CONTENTS/Resources/Wirecopy_WirecopyMac.bundle"
 
 swift "$ROOT/scripts/make-icon.swift" "$DIST/icon-1024.png"

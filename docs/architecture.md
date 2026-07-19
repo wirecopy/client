@@ -8,7 +8,7 @@ Wirecopy has two codebases joined by a versioned managed-service contract:
 Public repository                          Private repository
 ┌──────────────────────────┐              ┌──────────────────────────┐
 │ Native Swift/SwiftUI app │              │ Rails 8.1 monolith       │
-│ Standalone Swift CLI     │              │ Hotwire web application │
+│ Cross-platform npm CLI   │              │ Hotwire web application │
 │ Shared publishing model │◀─ OpenAPI ───▶│ JSON API and link host  │
 │ BYOS destination adapters│              │ jobs, billing and admin │
 └────────────┬─────────────┘              └────────────┬─────────────┘
@@ -27,8 +27,7 @@ remain in v1; breaking changes require a new major contract.
 
 The app supports macOS 14 and later as a universal Apple silicon and Intel
 build. SwiftUI owns normal application surfaces and AppKit is used where macOS
-APIs require it. The app and standalone CLI share Swift packages; the CLI does
-not depend on a running GUI application.
+APIs require it.
 
 | Module | Responsibility |
 | --- | --- |
@@ -114,10 +113,9 @@ Clerk provides Apple and GitHub sign-in for the web and native onboarding
 flow. Rails remains the authorization system of record. A Clerk session is
 exchanged for a revocable, scoped Rails device token stored in Keychain.
 
-The standalone CLI uses the same Keychain token when it can share the official
-access group. Self-built or differently signed CLIs can use a personal/device
-token created in the dashboard instead of depending on the official signing
-identity.
+The npm CLI uses a personal/device token created in the dashboard. Local
+configuration is stored in a user-only file, while CI supplies the same token
+through `WIRECOPY_TOKEN`. The native app keeps its token in Keychain.
 
 The v1 contract includes, at minimum:
 
@@ -224,9 +222,9 @@ wirecopy site ./dist --json
 wirecopy links revoke <id>
 ```
 
-The signed standalone CLI is bundled with the application in the same Homebrew
-Cask. A separate formula is deferred until independent CLI installation proves
-useful.
+The canonical CLI is the public npm package `wirecopy`. The Homebrew Cask
+installs only the native application and does not expose a competing executable.
+See [decision 0015](decisions/0015-distribute-cli-through-npm.md).
 
 ## Build order
 
