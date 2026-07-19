@@ -10,6 +10,7 @@ export interface PreparedInput {
   filename: string;
   contentType: string;
   byteSize: number;
+  notice?: string;
   cleanup(): Promise<void>;
 }
 
@@ -44,9 +45,12 @@ export async function prepareFiles(inputs: string[]): Promise<PreparedInput> {
 }
 
 export async function prepareSite(input: string): Promise<PreparedInput> {
-  const path = resolvePath(input);
+  const requestedPath = resolvePath(input);
+  let path = requestedPath;
   const info = await stat(path).catch(() => undefined);
   if (info?.isDirectory()) {
+    const resolved = await resolveSiteDirectory(path);
+    path = resolved.path;
     const temporaryDirectory = await mkdtemp(join(tmpdir(), "wirecopy-site-"));
     const output = join(temporaryDirectory, `${safeFilename(basename(path)) || "site"}.zip`);
     await zipSite(path, output);
@@ -56,6 +60,7 @@ export async function prepareSite(input: string): Promise<PreparedInput> {
       filename: basename(output),
       contentType: "application/zip",
       byteSize: archiveInfo.size,
+      ...(resolved.notice ? { notice: resolved.notice } : {}),
       cleanup: () => rm(temporaryDirectory, { recursive: true, force: true }),
     };
   }
@@ -72,6 +77,29 @@ export async function prepareSite(input: string): Promise<PreparedInput> {
     byteSize: info.size,
     cleanup: async () => {},
   };
+}
+
+async function resolveSiteDirectory(path: string): Promise<{ path: string; notice?: string }> {
+  const packageJson = await stat(join(path, "package.json")).catch(() => undefined);
+  if (!packageJson?.isFile()) {
+    return { path };
+  }
+
+  const candidates = ["dist", "build", "out", join(".output", "public")];
+  for (const candidate of candidates) {
+    const output = join(path, candidate);
+    const index = await stat(join(output, "index.html")).catch(() => undefined);
+    if (index?.isFile()) {
+      return {
+        path: output,
+        notice: `Using ${candidate.replaceAll("\\", "/")} from ${basename(path)}`,
+      };
+    }
+  }
+
+  throw new UsageError(
+    "This looks like application source, not a built site. Run the project build, then pass its output directory (for example dist/ or build/).",
+  );
 }
 
 function resolvePath(input: string): string {

@@ -20,6 +20,14 @@ const CENTRAL_SIGNATURE = 0x02014b50;
 const END_SIGNATURE = 0x06054b50;
 const UTF8_FLAG = 0x0800;
 const DOS_DATE_1980_01_01 = 0x0021;
+const IGNORED_DIRECTORIES = new Set([
+  ".git",
+  ".next",
+  ".nuxt",
+  ".output",
+  ".turbo",
+  "node_modules",
+]);
 
 export async function zipFiles(paths: string[], destination: string): Promise<void> {
   const used = new Set<string>();
@@ -49,7 +57,7 @@ async function collectSiteFiles(root: string, current = root): Promise<Source[]>
   const sources: Source[] = [];
 
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-    if (entry.name.startsWith(".")) {
+    if (entry.name.startsWith(".") || (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name))) {
       continue;
     }
     const path = resolve(current, entry.name);

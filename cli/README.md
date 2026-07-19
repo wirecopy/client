@@ -28,6 +28,11 @@ WIRECOPY_TOKEN='wc_live_...' wirecopy site ./dist --json
 `WIRECOPY_SERVER` overrides the default `https://wirecopy.app` API host.
 `WIRECOPY_EXPIRES_IN` sets the default retention in seconds.
 
+When `wirecopy site` receives an application project, it publishes an existing
+conventional build output (`dist/`, `build/`, `out/`, or `.output/public`) that
+contains `index.html`. It never executes package scripts implicitly. Build an
+unbuilt project first, or pass its output directory directly.
+
 ## Commands
 
 ```text

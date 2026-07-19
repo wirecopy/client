@@ -7,6 +7,8 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { formatProgressLine } from "../dist/progress.js";
+
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
 test("prints help without configuration", async () => {
@@ -128,6 +130,74 @@ test("packages and publishes a site folder", async (context) => {
   assert.match(multipart.toString("latin1"), /site\[mode\].*site/s);
   assert.ok(multipart.includes(Buffer.from("index.html")));
   assert.ok(multipart.includes(Buffer.from("assets/app.js")));
+});
+
+test("selects a React project build output and excludes dependencies", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "wirecopy-test-"));
+  const project = join(directory, "react-app");
+  await mkdir(join(project, "dist", "assets"), { recursive: true });
+  await mkdir(join(project, "node_modules", "package"), { recursive: true });
+  await mkdir(join(project, "src"), { recursive: true });
+  await writeFile(join(project, "package.json"), '{"scripts":{"build":"vite build"}}');
+  await writeFile(join(project, "dist", "index.html"), "<main>Built</main>");
+  await writeFile(join(project, "dist", "assets", "app.js"), "console.log('built')");
+  await writeFile(join(project, "node_modules", "package", "LICENSE"), "not for publishing");
+  await writeFile(join(project, "src", "main.jsx"), "not browser output");
+  let multipart = Buffer.alloc(0);
+
+  const server = createServer(async (request, response) => {
+    if (request.url === "/api/v1/sites" && request.method === "POST") {
+      multipart = await bodyBuffer(request);
+      json(response, 201, {
+        id: 43,
+        state: "published",
+        name: "dist.zip",
+        url: "https://s-built.wirecopy.site",
+        storage: "managed",
+        byte_size: 37,
+        file_count: 2,
+        expires_at: "2030-01-01T00:00:00Z",
+      });
+    } else {
+      response.writeHead(404).end();
+    }
+  });
+  await listen(server);
+  context.after(() => server.close());
+
+  const result = await run(["site", project, "--json"], {
+    WIRECOPY_TOKEN: "wc_live_test",
+    WIRECOPY_SERVER: origin(server),
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stderr, /Using dist from react-app/);
+  assert.ok(multipart.includes(Buffer.from("index.html")));
+  assert.ok(multipart.includes(Buffer.from("assets/app.js")));
+  assert.ok(!multipart.includes(Buffer.from("node_modules")));
+  assert.ok(!multipart.includes(Buffer.from("src/main.jsx")));
+});
+
+test("rejects unbuilt application source before upload", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "wirecopy-test-"));
+  const project = join(directory, "react-app");
+  await mkdir(join(project, "src"), { recursive: true });
+  await writeFile(join(project, "package.json"), '{"scripts":{"build":"vite build"}}');
+  await writeFile(join(project, "index.html"), "<div id='root'></div>");
+  await writeFile(join(project, "src", "main.jsx"), "source");
+
+  const result = await run(["site", project], {
+    WIRECOPY_TOKEN: "wc_live_test",
+    WIRECOPY_SERVER: "http://127.0.0.1:1",
+  });
+  assert.equal(result.code, 64);
+  assert.match(result.stderr, /application source.*Run the project build/s);
+});
+
+test("formats terminal upload progress with percentage, bytes, and elapsed time", () => {
+  const line = formatProgressLine({ label: "Uploading", sent: 512, total: 1024 }, 1500);
+  const plain = line.replaceAll(/\u001b\[[0-9;]*m/g, "");
+
+  assert.equal(plain, "Uploading 50% · 512 B / 1.0 KB · 1.5s");
 });
 
 function run(arguments_, environment = {}) {
